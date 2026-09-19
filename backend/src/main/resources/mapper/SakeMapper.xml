@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sakezuki.backend.sake.mapper.SakeMapper">
+
+    <select id="getSakeList" parameterType="hashmap" resultType="com.sakezuki.backend.sake.dto.SakeListResponse">
+        SELECT s.no,s.name_ja,s.name_kana,s.name_ko,s.sake_type,s.image_url AS imageUrl,br.name_ko AS breweryNameKo,ba.name_ko AS brandNameKo,br.prefecture
+        FROM SAKE s
+        JOIN BREWERY br ON s.brewery_no=br.no
+        LEFT JOIN BRAND ba ON s.brand_no=ba.no
+        <where>
+            <if test="fd!=null and fd!=''">
+                AND (s.name_ko LIKE CONCAT('%',#{fd,jdbcType=VARCHAR},'%')
+                OR s.name_kana LIKE CONCAT('%',#{fd,jdbcType=VARCHAR},'%')
+                OR s.name_ja LIKE CONCAT('%',#{fd,jdbcType=VARCHAR},'%'))
+            </if>
+            <if test="sakeType!=null and sakeType!=''">
+                AND sake_type=#{sakeType}
+            </if>
+        </where>
+        ORDER BY s.image_url IS NOT NULL DESC,s.no DESC
+        LIMIT 12 OFFSET #{start}
+    </select>
+
+    <select id="sakeListCount" parameterType="hashmap" resultType="int">
+        SELECT COUNT(*)
+        FROM SAKE s
+        <where>
+            <if test="fd!=null and fd!=''">
+                AND (s.name_ko LIKE CONCAT('%',#{fd,jdbcType=VARCHAR},'%')
+                OR s.name_kana LIKE CONCAT('%',#{fd,jdbcType=VARCHAR},'%')
+                OR s.name_ja LIKE CONCAT('%',#{fd,jdbcType=VARCHAR},'%'))
+            </if>
+            <if test="sakeType!=null and sakeType!=''">
+                AND s.sake_type=#{sakeType}
+            </if>
+        </where>
+    </select>
+
+</mapper>

@@ -24,11 +24,15 @@ ext {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    implementation 'org.springframework.ai:spring-ai-starter-model-google-genai'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+//    implementation 'org.springframework.ai:spring-ai-starter-model-google-genai'
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.0.1'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'com.mysql:mysql-connector-j'
     annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-jdbc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testCompileOnly 'org.projectlombok:lombok'

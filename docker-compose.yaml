@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: sakezuki-mysql
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: sakezuki
+      MYSQL_USER: sakezuki
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+    ports:
+      - "13306:3306"
+
+    volumes:
+      - sakezuki-mysql-data:/var/lib/mysql
+
+volumes:
+  sakezuki-mysql-data:
