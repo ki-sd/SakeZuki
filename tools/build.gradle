@@ -13,6 +13,7 @@ dependencies {
     implementation 'org.jsoup:jsoup:1.21.2'
     implementation 'com.mysql:mysql-connector-j:26.7.0'
     implementation 'com.google.genai:google-genai:1.72.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     compileOnly 'org.projectlombok:lombok:1.18.42'
     annotationProcessor 'org.projectlombok:lombok:1.18.42'
 

@@ -2,8 +2,59 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.sakezuki.backend.sake.mapper.SakeMapper">
 
+    <resultMap id="sakeDetailMap" type="com.sakezuki.backend.sake.dto.SakeDetailResponse">
+        <!-- 사케 정보 -->
+        <id property="no" column="no"/>
+        <result property="nameJa" column="nameJa"/>
+        <result property="nameKana" column="nameKana"/>
+        <result property="nameKo" column="nameKo"/>
+        <result property="sakeType" column="sakeType"/>
+        <result property="rice" column="rice"/>
+        <result property="polishingRatio" column="polishingRatio"/>
+        <result property="yeast" column="yeast"/>
+        <result property="sakeMeterValue" column="sakeMeterValue"/>
+        <result property="acidity" column="acidity"/>
+        <result property="alcoholPercentage" column="alcoholPercentage"/>
+        <result property="imageUrl" column="imageUrl"/>
+
+        <!-- 브랜드 정보 -->
+        <association property="brand" javaType="com.sakezuki.backend.sake.dto.BrandResponse">
+            <result property="nameJa" column="brandNameJa"/>
+            <result property="nameKo" column="brandNameKo"/>
+            <result property="nameKana" column="brandNameKana"/>
+        </association>
+
+        <!-- 양조장 정보 -->
+        <association property="brewery" javaType="com.sakezuki.backend.sake.dto.BreweryResponse">
+            <result property="nameJa" column="breweryNameJa"/>
+            <result property="nameKana" column="breweryNameKana"/>
+            <result property="nameKo" column="breweryNameKo"/>
+            <result property="corporationName" column="corporationName"/>
+            <result property="foundedYear" column="foundedYear"/>
+            <result property="ceo" column="ceo"/>
+            <result property="prefecture" column="prefecture"/>
+            <result property="address" column="address"/>
+            <result property="post" column="post"/>
+            <result property="phone" column="phone"/>
+            <result property="fax" column="fax"/>
+            <result property="email" column="email"/>
+            <result property="website" column="website"/>
+            <result property="tourAvailable" column="tourAvailable"/>
+            <result property="latitude" column="latitude"/>
+            <result property="longitude" column="longitude"/>
+        </association>
+    </resultMap>
+
     <select id="getSakeList" parameterType="hashmap" resultType="com.sakezuki.backend.sake.dto.SakeListResponse">
-        SELECT s.no,s.name_ja,s.name_kana,s.name_ko,s.sake_type,s.image_url AS imageUrl,br.name_ko AS breweryNameKo,ba.name_ko AS brandNameKo,br.prefecture
+        SELECT s.no,
+            s.name_ja,
+            s.name_kana,
+            s.name_ko,
+            s.sake_type,
+            s.image_url AS imageUrl,
+            br.name_ko AS breweryNameKo,
+            ba.name_ko AS brandNameKo,
+            br.prefecture
         FROM SAKE s
         JOIN BREWERY br ON s.brewery_no=br.no
         LEFT JOIN BRAND ba ON s.brand_no=ba.no
@@ -34,6 +85,48 @@
                 AND s.sake_type=#{sakeType}
             </if>
         </where>
+    </select>
+
+    <select id="getSakeDetail" parameterType="long" resultMap="sakeDetailMap">
+        SELECT s.no,
+            s.name_ja AS nameJa,
+            s.name_kana AS nameKana,
+            s.name_ko AS nameKo,
+            s.sake_type AS sakeType,
+            s.rice,
+            s.polishing_ratio AS polishingRatio,
+            s.yeast,
+            s.sake_meter_value AS sakeMeterValue,
+            s.acidity,
+            s.alcohol_percentage AS alcoholPercentage,
+            s.image_url AS imageUrl,
+            ba.name_ja AS brandNameJa,
+            ba.name_kana AS brandNameKana,
+            ba.name_ko AS brandNameKo,
+            br.name_ja AS breweryNameJa,
+            br.name_kana AS breweryNameKana,
+            br.name_ko AS breweryNameKo,
+            br.corporation_name AS corporationName,
+            br.founded_year AS foundedYear,
+            br.ceo,
+            br.prefecture,
+            br.address,
+            br.post,
+            br.phone,
+            br.fax,
+            br.email,
+            br.website,
+            CASE
+                WHEN br.tour_available='Y' THEN TRUE
+                WHEN br.tour_available='N' THEN FALSE
+                ELSE NULL
+            END AS tourAvailable,
+            br.latitude,
+            br.longitude
+        FROM SAKE s
+        LEFT JOIN BRAND ba ON s.brand_no=ba.no
+        JOIN BREWERY br ON s.brewery_no=br.no
+        WHERE s.no=#{no}
     </select>
 
 </mapper>

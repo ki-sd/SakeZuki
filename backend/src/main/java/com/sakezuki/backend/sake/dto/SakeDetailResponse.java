@@ -21,7 +21,6 @@ public class SakeDetailResponse {
     private String alcoholPercentage;
     private String imageUrl;
 
-    private String brandNameKo;
-    private String breweryNameKo;
-    private String prefecture;
+    private BrandResponse brand;
+    private BreweryResponse brewery;
 }

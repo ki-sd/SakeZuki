@@ -1,5 +1,6 @@
 package com.sakezuki.backend.sake.service;
 
+import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.dto.SakeListResponse;
 import com.sakezuki.backend.sake.mapper.SakeMapper;
 import lombok.RequiredArgsConstructor;
@@ -53,5 +54,10 @@ public class SakeServiceImpl implements SakeService {
         result.put("startPage",startPage);
         result.put("endPage",endPage);
         return result;
+    }
+
+    @Override
+    public SakeDetailResponse getSakeDetail(Long no){
+        return sMapper.getSakeDetail(no);
     }
 }

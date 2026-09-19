@@ -1,5 +1,5 @@
 import api from "./axios";
-import type {SakeListItem, SakeListResponse} from "@/app/types/sake";
+import type {SakeDetailResponse, SakeListItem, SakeListResponse} from "@/types/sake";
 
 // 사케 목록 조회 API
 export const getSakeList=async (
@@ -16,4 +16,10 @@ export const getSakeList=async (
         }
     });
     return response.data;
-}
+};
+
+// 사케 상세 조회
+export const getSakeDetail=async (no:number):Promise<SakeDetailResponse>=>{
+    const response=await api.get<SakeDetailResponse>(`/sake/${no}`);
+    return response.data;
+};
