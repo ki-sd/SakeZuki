@@ -12,10 +12,12 @@ public class BreweryResponse {
     private String nameKana;
     private String nameKo;
     private String corporationName;
+    private String corporationNameKo;
     private String foundedYear;
     private String ceo;
     private String prefecture;
     private String address;
+    private String addressKo;
     private String post;
     private String phone;
     private String fax;

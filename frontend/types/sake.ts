@@ -19,6 +19,13 @@ export interface SakeListResponse{
     list:SakeListItem[];
 }
 
+export interface SakeSearchItem{
+    no:number;
+    nameJa:string;
+    nameKo:string | null;
+    imageUrl:string | null;
+}
+
 export interface Brand{
     nameJa:string;
     nameKo:string | null;
@@ -30,10 +37,12 @@ export interface Brewery{
     nameKana:string | null;
     nameKo:string | null;
     corporationName:string | null;
+    corporationNameKo:string | null;
     foundedYear:string | null;
     ceo:string | null;
     prefecture:string | null;
     address:string | null;
+    addressKo:string | null;
     post:string | null;
     phone:string | null;
     fax:string | null;

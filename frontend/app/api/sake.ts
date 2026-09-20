@@ -1,5 +1,5 @@
 import api from "./axios";
-import type {SakeDetailResponse, SakeListItem, SakeListResponse} from "@/types/sake";
+import type {SakeDetailResponse, SakeListItem, SakeListResponse, SakeSearchItem} from "@/types/sake";
 
 // 사케 목록 조회 API
 export const getSakeList=async (
@@ -21,5 +21,16 @@ export const getSakeList=async (
 // 사케 상세 조회
 export const getSakeDetail=async (no:number):Promise<SakeDetailResponse>=>{
     const response=await api.get<SakeDetailResponse>(`/sake/${no}`);
+    return response.data;
+};
+
+// 사케 이름 검색
+export const searchSake=async (search:string):Promise<SakeSearchItem[]>=>{
+    const response=await api.get<SakeSearchItem[]>("/sake/search",{
+        params:{
+            search
+        }
+    });
+
     return response.data;
 };
