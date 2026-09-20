@@ -1,0 +1,31 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam activityBackgroundColor #F8FAFC
+skinparam activityBorderColor #334155
+skinparam activityDiamondBackgroundColor #FEF3C7
+skinparam activityDiamondBorderColor #92400E
+title 사케 목록 검색·종류 필터·페이지 이동
+
+start
+:검색어 입력 또는 종류 선택;
+:React state 갱신\n필터 변경 시 page=1;
+:TanStack Query key 변경\n["sakeList", page, keyword, sakeType];
+:GET /api/sake/list;
+if (page < 1?) then (예)
+  :요청 오류;
+  stop
+else (아니오)
+  :MyBatis 목록 SQL\nLIKE(name_ko, name_kana, name_ja)\n+ sake_type 조건;
+  :12건 LIMIT / OFFSET 조회;
+  :동일 조건 COUNT 조회;
+  :총 페이지·10페이지 블록 계산;
+endif
+if (결과 있음?) then (예)
+  :SakeCard 목록·페이지네이션 표시;
+else (아니오)
+  :검색 결과 없음 표시;
+endif
+stop
+@enduml

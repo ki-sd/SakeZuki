@@ -1,0 +1,42 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam sequenceArrowColor #334155
+skinparam sequenceLifeLineBorderColor #64748B
+skinparam sequenceParticipantBorderColor #334155
+skinparam sequenceParticipantBackgroundColor #F8FAFC
+skinparam sequenceGroupBorderColor #64748B
+title 한국어 표시 컬럼 일괄 번역
+
+actor 운영자 as U
+participant "TranslationMain" as MAIN
+participant "SakeTranslator" as T
+participant "TranslationRepository" as R
+participant "GeminiTranslator" as AI
+database "MySQL" as DB
+U -> MAIN : 번역 도구 실행
+MAIN -> T : translate()
+loop 제품명 미번역 배치
+  T -> R : findUntranslatedSakeNames(limit)
+  R -> DB : name_ko IS NULL
+  DB --> T : no, name_ja, name_kana
+  T -> T : HTML 주석·태그 정리
+  T -> AI : structured JSON batch 요청
+  AI --> T : no + nameKo 배열
+  T -> T : 개수·no·중복·빈값 검증
+  T -> R : updateSakeNameKo(...)
+  R -> DB : name_ko IS NULL인 행만 UPDATE
+end
+loop 쌀·효모의 DISTINCT 미번역 값
+  T -> R : findUntranslatedRice/Yeast(limit)
+  R -> DB : DISTINCT 값 + *_ko IS NULL
+  DB --> T : 고유 원문
+  T -> AI : structured JSON batch 요청
+  AI --> T : id + valueKo 배열
+  T -> T : 요청 id·개수·중복·빈값 검증
+  T -> R : updateRiceKo / updateYeastKo
+  R -> DB : 같은 원문의 미번역 행 갱신
+end
+MAIN --> U : 처리 현황 출력
+@enduml

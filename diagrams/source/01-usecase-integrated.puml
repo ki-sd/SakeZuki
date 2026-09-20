@@ -1,0 +1,55 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam ArrowColor #475569
+skinparam actorBorderColor #0F172A
+skinparam usecaseBorderColor #334155
+skinparam usecaseBackgroundColor #F8FAFC
+skinparam rectangleBorderColor #64748B
+left to right direction
+
+actor "방문자" as Guest
+actor "데이터 관리자" as Admin
+
+rectangle "SakeZuki" {
+  usecase "사케 목록·검색" as U1
+  usecase "종류 필터·페이지 이동" as U2
+  usecase "사케 상세 조회" as U3
+  usecase "브랜드·양조장 정보 조회" as U4
+  usecase "양조장 위치 확인" as U5
+  usecase "음식 → 사케 추천" as U6
+  usecase "사케 자동완성·선택" as U7
+  usecase "사케 → 음식 추천" as U8
+  usecase "추천 결과 재사용" as U9
+  usecase "사케·브랜드·양조장 수집" as U10
+  usecase "한국어 표시 데이터 생성" as U11
+  usecase "추천 검색 프로필 생성" as U12
+  U1 -[hidden]down- U2
+  U2 -[hidden]down- U3
+  U3 -[hidden]down- U4
+  U4 -[hidden]down- U5
+  U6 -[hidden]down- U7
+  U7 -[hidden]down- U8
+  U8 -[hidden]down- U9
+  U10 -[hidden]down- U11
+  U11 -[hidden]down- U12
+  U1 -[hidden]right- U6
+  U6 -[hidden]right- U10
+}
+
+Guest -right- U1
+Guest -right- U3
+Guest -right- U6
+Guest -right- U8
+Admin -left- U10
+Admin -left- U11
+Admin -left- U12
+U2 ..> U1 : <<extend>>
+U3 ..> U4 : <<include>>
+U4 ..> U5 : <<extend>>
+U8 ..> U7 : <<include>>
+U6 ..> U9 : <<include>>
+U8 ..> U9 : <<include>>
+@enduml

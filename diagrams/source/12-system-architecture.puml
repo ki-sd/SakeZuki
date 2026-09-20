@@ -1,0 +1,47 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam rectangleBackgroundColor #F8FAFC
+skinparam rectangleBorderColor #334155
+skinparam nodeBackgroundColor #F8FAFC
+skinparam nodeBorderColor #334155
+skinparam cloudBackgroundColor #EFF6FF
+skinparam cloudBorderColor #1D4ED8
+left to right direction
+title SakeZuki 현재 코드 기준 시스템 아키텍처
+
+actor "사용자" as U
+node "Frontend\nNext.js 16 / React 19" as FE {
+  component "목록·검색·상세\nTanStack Query / Axios" as SEARCH
+  component "페어링 추천\n자동완성·결과 표시" as RECUI
+}
+node "Backend\nSpring Boot 4 / Java 21" as BE {
+  component "SakeController\nSakeService\nSakeMapper" as SAKEAPI
+  component "RecommendController\nRecommendService\nRecommendMapper" as RECAPI
+  component "GeminiRecommendService\nSpring AI" as AI
+}
+database "MySQL 8.4\nSAKE / BRAND / BREWERY\nRECOMMEND_* / PROFILE" as DB
+node "Tools\nJava / Jsoup / Gradle" as TOOLS {
+  component "크롤러·이미지 수집" as CRAWL
+  component "일괄 번역·범위 파싱" as CLEAN
+}
+cloud "외부 사케 데이터" as SOURCE
+cloud "Google Gemini API" as GEMINI
+cloud "Google Maps Embed" as MAP
+U --> SEARCH
+U --> RECUI
+SEARCH --> SAKEAPI : REST
+RECUI --> SAKEAPI : 자동완성·상세
+RECUI --> RECAPI : 추천 REST
+SAKEAPI --> DB : MyBatis
+RECAPI --> DB : 후보·캐시
+RECAPI --> AI : 분석·선정
+AI --> GEMINI : structured response
+SOURCE --> CRAWL : HTML
+CRAWL --> DB : 원본 데이터
+CLEAN --> DB : 한국어·프로필
+CLEAN --> GEMINI : 일괄 번역
+SEARCH ..> MAP : 양조장 위치
+@enduml

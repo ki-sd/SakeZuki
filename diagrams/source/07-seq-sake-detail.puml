@@ -1,0 +1,40 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam sequenceArrowColor #334155
+skinparam sequenceLifeLineBorderColor #64748B
+skinparam sequenceParticipantBorderColor #334155
+skinparam sequenceParticipantBackgroundColor #F8FAFC
+skinparam sequenceGroupBorderColor #64748B
+title 사케 상세·브랜드·양조장 탭
+
+actor 사용자 as U
+participant "Next.js 상세 화면" as F
+participant "SakeController" as C
+participant "SakeService" as S
+participant "SakeMapper XML" as M
+database "MySQL" as DB
+participant "Google Maps Embed" as MAP
+
+U -> F : /sake/{no} 열기
+F -> C : GET /api/sake/{no}
+activate C
+C -> S : getSakeDetail(no)
+S -> M : getSakeDetail(no)
+M -> DB : SAKE + BRAND + BREWERY 조회
+DB --> M : 한국어·일본어 원문·주소·좌표 등
+M --> S : SakeDetailResponse
+S --> C : 상세 DTO
+C --> F : JSON
+deactivate C
+F --> U : 기본 사케 탭 + 브랜드·양조장 탭
+U -> F : 양조장 탭 선택
+alt 주소와 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY 존재
+  F -> MAP : 장소 iframe 요청
+  MAP --> F : 지도
+  F --> U : 지도·Google 지도 링크
+else 조건 미충족
+  F --> U : 지도 생략
+end
+@enduml

@@ -1,0 +1,52 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam sequenceArrowColor #334155
+skinparam sequenceLifeLineBorderColor #64748B
+skinparam sequenceParticipantBorderColor #334155
+skinparam sequenceParticipantBackgroundColor #F8FAFC
+skinparam sequenceGroupBorderColor #64748B
+title 음식 → 사케 추천: DB 후보와 영속 캐시
+
+actor 사용자 as U
+participant "Next.js 추천 화면" as F
+participant "RecommendController" as C
+participant "RecommendService" as S
+participant "RecommendMapper XML" as M
+participant "GeminiRecommendService" as AI
+database "MySQL" as DB
+
+U -> F : 음식 입력·추천 요청
+F -> C : POST /api/recommend/sake {food}
+activate C
+C -> S : sakeRecommendList(food)
+activate S
+S -> M : getSakeRecommendList(trim(food))
+M -> DB : RECOMMEND_SAKE + SAKE 조회
+DB --> M : 저장된 추천
+alt 캐시 hit
+  M --> S : 추천 목록
+else 캐시 miss
+  S -> AI : analyzeFood(food)
+  AI --> S : 종류·주도·산도·정미율 범위
+  S -> M : getSakeRecommendCandidates(condition)
+  M -> DB : SAKE_RECOMMEND_PROFILE 점수화
+  DB --> M : 상위 40개 실제 SAKE
+  M --> S : 후보
+  S -> AI : rerankSake(food, condition, candidates)
+  AI --> S : sakeNo 3개 + reason
+  S -> S : 개수·중복·후보 포함 검증
+  S -> M : insertSakeRecommend(...)
+  M -> DB : RECOMMEND_SAKE INSERT
+  S -> M : getSakeRecommendList(food)
+  M -> DB : DB 제품 정보 재조회
+  DB --> M : 추천 목록
+end
+S -> S : 결과 3개 확인
+S --> C : SakeRecommendResponse
+deactivate S
+C --> F : JSON
+deactivate C
+F --> U : 사케 상세 정보 + 추천 이유
+@enduml

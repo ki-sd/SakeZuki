@@ -1,0 +1,51 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam sequenceArrowColor #334155
+skinparam sequenceLifeLineBorderColor #64748B
+skinparam sequenceParticipantBorderColor #334155
+skinparam sequenceParticipantBackgroundColor #F8FAFC
+skinparam sequenceGroupBorderColor #64748B
+title 사케 → 음식 추천: 자동완성·sakeNo 캐시
+
+actor 사용자 as U
+participant "Next.js 추천 화면" as F
+participant "SakeController" as SC
+participant "RecommendController" as RC
+participant "RecommendService" as RS
+participant "SakeService" as SS
+participant "RecommendMapper XML" as RM
+participant "GeminiRecommendService" as AI
+database "MySQL" as DB
+
+U -> F : 사케명 입력 (2자 이상)
+F -> SC : GET /api/sake/search?search=...
+SC -> SS : searchSakeList(search)
+SS -> DB : 실제 SAKE 검색 (최대 10건)
+DB --> SS : 검색 결과
+SS --> SC : List<SakeSearchResponse>
+SC --> F : 자동완성 결과
+U -> F : 결과 중 SAKE 선택
+F -> RC : POST /api/recommend/food {sakeNo}
+activate RC
+RC -> RS : foodRecommendList(sakeNo)
+RS -> RM : getFoodRecommendList(sakeNo)
+RM -> DB : RECOMMEND_FOOD 조회
+alt 캐시 hit
+  DB --> RS : 음식 추천
+else 캐시 miss
+  RS -> SS : getSakeDetail(sakeNo)
+  SS -> DB : SAKE + BRAND + BREWERY
+  DB --> RS : SakeDetailResponse
+  RS -> AI : recommendFood(sake)
+  AI --> RS : 음식 3개 + reason
+  RS -> RS : 개수·이름·이유 검증
+  RS -> RM : insertFoodRecommend(sakeNo, recommends)
+  RM -> DB : RECOMMEND_FOOD INSERT
+end
+RS --> RC : FoodRecommendResponse
+RC --> F : JSON
+deactivate RC
+F --> U : 음식명·추천 이유 표시
+@enduml

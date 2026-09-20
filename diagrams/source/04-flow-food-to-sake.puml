@@ -1,0 +1,40 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam activityBackgroundColor #F8FAFC
+skinparam activityBorderColor #334155
+skinparam activityDiamondBackgroundColor #FEF3C7
+skinparam activityDiamondBorderColor #92400E
+title 음식 → 실제 DB 사케 추천
+
+start
+:음식명 입력·공백 제거;
+if (빈 음식명?) then (예)
+  :입력 오류;
+  stop
+else (아니오)
+  :POST /api/recommend/sake;
+endif
+:RECOMMEND_SAKE에서 음식명 조회; <<database>>
+if (저장 결과 있음?) then (예)
+  :DB 추천 결과 재사용;
+else (아니오)
+  :Gemini로 음식 특성·검색 조건 생성; <<external>>
+  :SAKE_RECOMMEND_PROFILE 기반\nDB 후보 점수화·상위 40건 조회; <<database>>
+  if (후보 없음?) then (예)
+    :추천 불가 오류;
+    stop
+  else (아니오)
+    :Gemini가 후보 중 3건 재정렬; <<external>>
+    :3개·중복·후보 포함 여부 검증;
+    :RECOMMEND_SAKE 저장 후\nSAKE 상세 컬럼 재조회; <<database>>
+  endif
+endif
+if (결과가 정확히 3건?) then (예)
+  :DB 제품 정보 + AI 추천 이유 표시;
+else (아니오)
+  :결과 오류;
+endif
+stop
+@enduml

@@ -1,0 +1,30 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam activityBackgroundColor #F8FAFC
+skinparam activityBorderColor #334155
+skinparam activityDiamondBackgroundColor #FEF3C7
+skinparam activityDiamondBorderColor #92400E
+title 사케 상세·브랜드·양조장 표시
+
+start
+:목록에서 사케 선택;
+:GET /api/sake/{no};
+:SAKE + BRAND + BREWERY 조인 조회;
+:상세 DTO를 JSON으로 반환;
+if (조회 오류?) then (예)
+  :오류 화면 표시;
+  stop
+else (아니오)
+  :한국어 표시값 우선;\n원문은 보조 표기;
+  :사케 / 브랜드 / 양조장 탭 제공;
+endif
+if (양조장 탭 + 주소 + 지도 키?) then (예)
+  :Google Maps Embed 표시; <<external>>
+else (아니오)
+  :지도 영역 생략;
+endif
+:사케 번호로 추천 화면 이동 가능;
+stop
+@enduml

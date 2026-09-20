@@ -1,0 +1,32 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam activityBackgroundColor #F8FAFC
+skinparam activityBorderColor #334155
+skinparam activityDiamondBackgroundColor #FEF3C7
+skinparam activityDiamondBorderColor #92400E
+title 사케 선택 → 음식 추천
+
+start
+:사케명 2자 이상 입력;
+:GET /api/sake/search 자동완성;
+:DB 결과에서 실제 SAKE 선택;
+if (선택한 sakeNo 없음?) then (예)
+  :추천 버튼 비활성;
+  stop
+else (아니오)
+  :POST /api/recommend/food\n{sakeNo};
+endif
+:RECOMMEND_FOOD 조회; <<database>>
+if (저장 결과 있음?) then (예)
+  :기존 음식 추천 반환;
+else (아니오)
+  :SAKE 상세 + BRAND + BREWERY 조회; <<database>>
+  :Gemini에 실제 사케 정보 전달; <<external>>
+  :음식 3개·이름·이유 검증;
+  :RECOMMEND_FOOD에 저장; <<database>>
+endif
+:음식명·추천 이유 표시;
+stop
+@enduml

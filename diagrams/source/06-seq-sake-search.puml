@@ -1,0 +1,42 @@
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam sequenceArrowColor #334155
+skinparam sequenceLifeLineBorderColor #64748B
+skinparam sequenceParticipantBorderColor #334155
+skinparam sequenceParticipantBackgroundColor #F8FAFC
+skinparam sequenceGroupBorderColor #64748B
+title 사케 목록·검색·필터·페이지네이션
+
+actor 사용자 as U
+participant "Next.js / TanStack Query" as F
+participant "Axios" as A
+participant "SakeController" as C
+participant "SakeService" as S
+participant "SakeMapper XML" as M
+database "MySQL" as DB
+
+U -> F : 검색어 제출 / 종류 변경 / 페이지 선택
+F -> F : queryKey 변경
+F -> A : getSakeList(page, fd, sakeType)
+A -> C : GET /api/sake/list
+activate C
+C -> S : getSakeList(page, fd, sakeType)
+activate S
+S -> M : 조건 + OFFSET (12건)
+M -> DB : 목록 SELECT
+DB --> M : SAKE + BRAND + BREWERY
+M --> S : List<SakeListResponse>
+C -> S : sakeListPage(...)
+S -> M : sakeListCount(...)
+M -> DB : COUNT(*)
+DB --> M : count
+S --> C : count / curpage / totalpage / 10페이지 블록
+S --> C : 목록
+deactivate S
+C --> A : JSON
+deactivate C
+A --> F : query data
+F --> U : 카드 목록 / 로딩·오류·빈 결과
+@enduml
