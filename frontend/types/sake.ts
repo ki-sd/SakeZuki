@@ -51,8 +51,10 @@ export interface SakeDetailResponse{
     nameKo:string | null;
     sakeType:string | null;
     rice:string | null;
+    riceKo:string | null;
     polishingRatio:string | null;
     yeast:string | null;
+    yeastKo:string | null;
     sakeMeterValue:string | null;
     acidity:string | null;
     alcoholPercentage:string | null;

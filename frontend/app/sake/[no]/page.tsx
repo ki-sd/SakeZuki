@@ -50,18 +50,18 @@ export default function SakeDetailPage(){
         <>
             <Header/>
 
-            <main className={"mx-auto max-w-7xl px-6 py-10"}>
+            <main className={"mx-auto w-full max-w-7xl px-6 py-10"}>
                 <Link href="/sake"
                     className={"mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition hover:text-gray-900"}>
                     <span>←</span>
                     <span>목록으로 돌아가기</span>
                 </Link>
                 {/* 사케 기본정보 */}
-                <section className={"grid gap-10 md:grid-cols-[360px_1fr]"}>
+                <section className={"grid gap-10 md:grid-cols-[360px_1fr] md:items-center"}>
                     <div className={"overflow-hidden rounded-xl border border-gray-200 bg-white"}>
-                        <div className={"aspect-[3/4] bg-gray-50"}>
-                            <img src={data.imageUrl || "/images/sake-placeholder.png"} alt={data.nameKo || data.nameJa}
-                                className={"h-full w-full object-contain"}/>
+                        <div className={"h-[480px] bg-gray-50"}>
+                            <img src={data.imageUrl || "/images/sake-placeholder.png"}
+                                alt={data.nameKo || data.nameJa} className={"h-full w-full object-contain"}/>
                         </div>
                     </div>
 
@@ -148,16 +148,24 @@ export default function SakeDetailPage(){
                         </button>
                     </div>
 
-                    <div className={"py-8"}>
+                    <div className={"min-h-[420px] py-8"}>
                         {/* 사케 정보 */}
                         {activeTab==="sake" && (
                             <div className={"grid gap-x-12 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
                                 <InfoItem label="종류"
                                     value={getSakeTypeLabel(data.sakeType)}
                                     subValue={data.sakeType}/>
-                                <InfoItem label="사용 쌀" value={data.rice}/>
-                                <InfoItem label="정미보합" value={data.polishingRatio}/>
-                                <InfoItem label="효모" value={data.yeast}/>
+                                <InfoItem label="사용 쌀"
+                                    value={data.riceKo || data.rice}
+                                    subValue={data.riceKo ? data.rice : null}
+                                />
+                                <InfoItem label="정미보합"
+                                    value={data.polishingRatio}
+                                />
+                                <InfoItem label="효모"
+                                    value={data.yeastKo || data.yeast}
+                                    subValue={data.yeastKo ? data.yeast : null}
+                                />
                                 <InfoItem label="일본주도" value={data.sakeMeterValue}/>
                                 <InfoItem label="산도" value={data.acidity}/>
                                 <InfoItem label="알코올 도수"

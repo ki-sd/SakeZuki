@@ -6,7 +6,6 @@ import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.service.SakeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -18,7 +17,6 @@ public class RecommendServiceImpl implements RecommendService {
     private final GeminiRecommendService gService;
 
     @Override
-    @Transactional
     public FoodRecommendResponse foodRecommendList(Long sakeNo) {
         List<RecommendedFoodResponse> recommends=rMapper.getFoodRecommendList(sakeNo);
         if(recommends.isEmpty()){
@@ -46,14 +44,11 @@ public class RecommendServiceImpl implements RecommendService {
                 rMapper.getSakeRecommendList(normalizedFood);
 
         if(recommendations.isEmpty()){
-            long start=System.currentTimeMillis();
 
             SakeRecommendCondition condition=gService.analyzeFood(normalizedFood);
-            long analyzeEnd=System.currentTimeMillis();
 
             List<SakeRecommendCandidate> candidates=
                     rMapper.getSakeRecommendCandidates(condition);
-            long retrievalEnd=System.currentTimeMillis();
 
             if(candidates.isEmpty()){
                 throw new IllegalStateException("추천 가능한 사케 후보가 없습니다.");
@@ -65,12 +60,6 @@ public class RecommendServiceImpl implements RecommendService {
                             condition,
                             candidates
                     );
-            long rerankEnd=System.currentTimeMillis();
-
-//            System.out.println("1차 Gemini: "+(analyzeEnd-start)+"ms");
-//            System.out.println("DB Retrieval: "+(retrievalEnd-analyzeEnd)+"ms");
-//            System.out.println("2차 Gemini: "+(rerankEnd-retrievalEnd)+"ms");
-//            System.out.println("총 AI 추천: "+(rerankEnd-start)+"ms");
 
             rMapper.insertSakeRecommend(normalizedFood,rerankItems);
 
