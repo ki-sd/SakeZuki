@@ -2,19 +2,41 @@
 
 import {useState} from "react";
 import Link from "next/link";
-import {useMutation, useQuery} from "@tanstack/react-query";
-import {recommendFood, recommendSake} from "@/app/api/recommend";
-import {searchSake} from "@/app/api/sake";
+import {useSearchParams} from "next/navigation";
+import {useMutation,useQuery} from "@tanstack/react-query";
+import {recommendFood,recommendSake} from "@/app/api/recommend";
+import {getSakeDetail,searchSake} from "@/app/api/sake";
 import type {SakeSearchItem} from "@/types/sake";
 import Header from "@/components/layout/Header";
 
 type RecommendMode="sake" | "food";
 
 export default function RecommendPage(){
-    const [mode,setMode]=useState<RecommendMode>("sake");
+    const searchParams=useSearchParams();
+    const sakeNoParam=searchParams.get("sakeNo");
+    const initialSakeNo=sakeNoParam ? Number(sakeNoParam) : null;
+    const hasInitialSake=initialSakeNo!==null && Number.isInteger(initialSakeNo) && initialSakeNo>0;
+
+    const [mode,setMode]=useState<RecommendMode>(hasInitialSake ? "food" : "sake");
     const [food,setFood]=useState("");
     const [sakeSearch,setSakeSearch]=useState("");
     const [selectedSake,setSelectedSake]=useState<SakeSearchItem | null>(null);
+
+    const initialSakeQuery=useQuery({
+        queryKey:["sakeDetail",initialSakeNo],
+        queryFn:()=>getSakeDetail(initialSakeNo!),
+        enabled:hasInitialSake,
+        retry:false
+    });
+
+    const initialSake:SakeSearchItem | null=initialSakeQuery.data ? {
+        no:initialSakeQuery.data.no,
+        nameKo:initialSakeQuery.data.nameKo,
+        nameJa:initialSakeQuery.data.nameJa,
+        imageUrl:initialSakeQuery.data.imageUrl
+    } : null;
+
+    const currentSake=selectedSake || initialSake;
 
     const sakeMutation=useMutation({
         mutationFn:recommendSake
@@ -27,7 +49,7 @@ export default function RecommendPage(){
     const searchQuery=useQuery({
         queryKey:["sakeSearch",sakeSearch],
         queryFn:()=>searchSake(sakeSearch.trim()),
-        enabled:mode==="food" && sakeSearch.trim().length>=2 && !selectedSake,
+        enabled:mode==="food" && sakeSearch.trim().length>=2 && !selectedSake && !hasInitialSake,
         staleTime:30000
     });
 
@@ -44,12 +66,12 @@ export default function RecommendPage(){
     };
 
     const handleFoodRecommend=()=>{
-        if(!selectedSake || foodMutation.isPending){
+        if(!currentSake || foodMutation.isPending){
             return;
         }
 
         foodMutation.mutate({
-            sakeNo:selectedSake.no
+            sakeNo:currentSake.no
         });
     };
 
@@ -89,27 +111,21 @@ export default function RecommendPage(){
                 </section>
 
                 <div className={"mb-8 flex border-b border-gray-200"}>
-                    <button
-                        type={"button"}
-                        onClick={()=>handleModeChange("sake")}
-                        className={`border-b-2 px-5 py-3 text-sm font-semibold transition ${
-                            mode==="sake"
-                                ? "border-gray-900 text-gray-900"
-                                : "border-transparent text-gray-400 hover:text-gray-700"
-                        }`}
-                    >
+                    <button type={"button"} onClick={()=>handleModeChange("sake")}
+                            className={`border-b-2 px-5 py-3 text-sm font-semibold transition ${
+                                mode==="sake"
+                                    ? "border-gray-900 text-gray-900"
+                                    : "border-transparent text-gray-400 hover:text-gray-700"
+                            }`}>
                         음식으로 사케 찾기
                     </button>
 
-                    <button
-                        type={"button"}
-                        onClick={()=>handleModeChange("food")}
-                        className={`border-b-2 px-5 py-3 text-sm font-semibold transition ${
-                            mode==="food"
-                                ? "border-gray-900 text-gray-900"
-                                : "border-transparent text-gray-400 hover:text-gray-700"
-                        }`}
-                    >
+                    <button type={"button"} onClick={()=>handleModeChange("food")}
+                            className={`border-b-2 px-5 py-3 text-sm font-semibold transition ${
+                                mode==="food"
+                                    ? "border-gray-900 text-gray-900"
+                                    : "border-transparent text-gray-400 hover:text-gray-700"
+                            }`}>
                         사케로 음식 찾기
                     </button>
                 </div>
@@ -117,35 +133,25 @@ export default function RecommendPage(){
                 {mode==="sake" && (
                     <>
                         <section className={"rounded-2xl border border-gray-200 bg-white p-6"}>
-                            <label
-                                htmlFor={"food"}
-                                className={"mb-2 block text-sm font-semibold text-gray-800"}
-                            >
+                            <label htmlFor={"food"} className={"mb-2 block text-sm font-semibold text-gray-800"}>
                                 음식
                             </label>
 
                             <div className={"flex gap-3"}>
-                                <input
-                                    id={"food"}
-                                    type={"text"}
-                                    value={food}
-                                    onChange={(e)=>setFood(e.target.value)}
-                                    onKeyDown={(e)=>{
-                                        if(e.key==="Enter"){
-                                            handleSakeRecommend();
-                                        }
-                                    }}
-                                    placeholder={"예: 삼겹살, 스키야키, 회"}
-                                    disabled={sakeMutation.isPending}
-                                    className={"min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-gray-500 disabled:bg-gray-50"}
+                                <input id={"food"} type={"text"} value={food}
+                                       onChange={(e)=>setFood(e.target.value)}
+                                       onKeyDown={(e)=>{
+                                           if(e.key==="Enter"){
+                                               handleSakeRecommend();
+                                           }
+                                       }}
+                                       placeholder={"예: 삼겹살, 스키야키, 회"} disabled={sakeMutation.isPending}
+                                       className={"min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-gray-500 disabled:bg-gray-50"}
                                 />
 
-                                <button
-                                    type={"button"}
-                                    onClick={handleSakeRecommend}
-                                    disabled={!food.trim() || sakeMutation.isPending}
-                                    className={"shrink-0 rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"}
-                                >
+                                <button type={"button"} onClick={handleSakeRecommend}
+                                        disabled={!food.trim() || sakeMutation.isPending}
+                                        className={"shrink-0 rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"}>
                                     {sakeMutation.isPending ? "추천 중..." : "추천받기"}
                                 </button>
                             </div>
@@ -191,17 +197,12 @@ export default function RecommendPage(){
 
                                 <div className={"grid gap-6 md:grid-cols-2 lg:grid-cols-3"}>
                                     {sakeMutation.data.recommendations.map((sake)=>(
-                                        <Link
-                                            key={sake.no}
-                                            href={`/sake/${sake.no}`}
-                                            className={"group overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-1 hover:shadow-lg"}
-                                        >
+                                        <Link key={sake.no} href={`/sake/${sake.no}`}
+                                              className={"group overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-1 hover:shadow-lg"}>
                                             <div className={"flex h-72 items-center justify-center bg-gray-50 p-6"}>
-                                                <img
-                                                    src={sake.imageUrl || "/images/sake-placeholder.png"}
-                                                    alt={sake.nameKo || sake.nameJa}
-                                                    className={"h-full w-full object-contain transition group-hover:scale-105"}
-                                                />
+                                                <img src={sake.imageUrl || "/images/sake-placeholder.png"}
+                                                     alt={sake.nameKo || sake.nameJa}
+                                                     className={"h-full w-full object-contain transition group-hover:scale-105"}/>
                                             </div>
 
                                             <div className={"p-5"}>
@@ -264,113 +265,115 @@ export default function RecommendPage(){
                 {mode==="food" && (
                     <>
                         <section className={"rounded-2xl border border-gray-200 bg-white p-6"}>
-                            <label
-                                htmlFor={"sakeSearch"}
-                                className={"mb-2 block text-sm font-semibold text-gray-800"}
-                            >
+                            <label htmlFor={"sakeSearch"} className={"mb-2 block text-sm font-semibold text-gray-800"}>
                                 사케
                             </label>
 
-                            <div className={"flex gap-3"}>
-                                <div className={"relative min-w-0 flex-1"}>
-                                    <input
-                                        id={"sakeSearch"}
-                                        type={"text"}
-                                        value={sakeSearch}
-                                        onChange={(e)=>handleSakeSearchChange(e.target.value)}
-                                        onKeyDown={(e)=>{
-                                            if(e.key==="Enter" && selectedSake){
-                                                handleFoodRecommend();
-                                            }
-                                        }}
-                                        placeholder={"사케 이름을 검색해주세요."}
-                                        disabled={foodMutation.isPending}
-                                        autoComplete={"off"}
-                                        className={"w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-gray-500 disabled:bg-gray-50"}
-                                    />
+                            {hasInitialSake && initialSakeQuery.isPending ? (
+                                <div className={"rounded-lg bg-gray-50 px-4 py-4 text-sm text-gray-500"}>
+                                    사케 정보를 불러오는 중...
+                                </div>
+                            ) : (
+                                <>
+                                    <div className={"flex gap-3"}>
+                                        <div className={"relative min-w-0 flex-1"}>
+                                            <input id={"sakeSearch"} type={"text"}
+                                                   value={selectedSake
+                                                       ? sakeSearch
+                                                       : initialSake
+                                                           ? initialSake.nameKo || initialSake.nameJa
+                                                           : sakeSearch}
+                                                   onChange={(e)=>handleSakeSearchChange(e.target.value)}
+                                                   onKeyDown={(e)=>{
+                                                       if(e.key==="Enter" && currentSake){
+                                                           handleFoodRecommend();
+                                                       }
+                                                   }}
+                                                   placeholder={"사케 이름을 검색해주세요."}
+                                                   disabled={foodMutation.isPending || hasInitialSake}
+                                                   autoComplete={"off"}
+                                                   className={"w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-gray-500 disabled:bg-gray-50"}
+                                            />
 
-                                    {!selectedSake && sakeSearch.trim().length>=2 && (
-                                        <div className={"absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"}>
-                                            {searchQuery.isFetching && (
-                                                <p className={"px-4 py-4 text-sm text-gray-500"}>
-                                                    검색 중...
-                                                </p>
-                                            )}
-
-                                            {!searchQuery.isFetching && searchQuery.data?.length===0 && (
-                                                <p className={"px-4 py-4 text-sm text-gray-500"}>
-                                                    검색 결과가 없습니다.
-                                                </p>
-                                            )}
-
-                                            {!searchQuery.isFetching && searchQuery.data?.map((sake)=>(
-                                                <button
-                                                    key={sake.no}
-                                                    type={"button"}
-                                                    onClick={()=>handleSakeSelect(sake)}
-                                                    className={"flex w-full items-center gap-4 border-b border-gray-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-gray-50"}
-                                                >
-                                                    <div className={"flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-50"}>
-                                                        <img
-                                                            src={sake.imageUrl || "/images/sake-placeholder.png"}
-                                                            alt={sake.nameKo || sake.nameJa}
-                                                            className={"h-full w-full object-contain"}
-                                                        />
-                                                    </div>
-
-                                                    <div className={"min-w-0"}>
-                                                        <p className={"truncate font-semibold text-gray-900"}>
-                                                            {sake.nameKo || sake.nameJa}
+                                            {!hasInitialSake && !selectedSake && sakeSearch.trim().length>=2 && (
+                                                <div className={"absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"}>
+                                                    {searchQuery.isFetching && (
+                                                        <p className={"px-4 py-4 text-sm text-gray-500"}>
+                                                            검색 중...
                                                         </p>
+                                                    )}
 
-                                                        {sake.nameKo && (
-                                                            <p className={"mt-1 truncate text-sm text-gray-400"}>
-                                                                {sake.nameJa}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            ))}
+                                                    {!searchQuery.isFetching && searchQuery.data?.length===0 && (
+                                                        <p className={"px-4 py-4 text-sm text-gray-500"}>
+                                                            검색 결과가 없습니다.
+                                                        </p>
+                                                    )}
+
+                                                    {!searchQuery.isFetching && searchQuery.data?.map((sake)=>(
+                                                        <button key={sake.no} type={"button"} onClick={()=>handleSakeSelect(sake)}
+                                                                className={"flex w-full items-center gap-4 border-b border-gray-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-gray-50"}>
+                                                            <div className={"flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-50"}>
+                                                                <img src={sake.imageUrl || "/images/sake-placeholder.png"}
+                                                                     alt={sake.nameKo || sake.nameJa}
+                                                                     className={"h-full w-full object-contain"}/>
+                                                            </div>
+
+                                                            <div className={"min-w-0"}>
+                                                                <p className={"truncate font-semibold text-gray-900"}>
+                                                                    {sake.nameKo || sake.nameJa}
+                                                                </p>
+
+                                                                {sake.nameKo && (
+                                                                    <p className={"mt-1 truncate text-sm text-gray-400"}>
+                                                                        {sake.nameJa}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button type={"button"} onClick={handleFoodRecommend}
+                                                disabled={!currentSake || foodMutation.isPending}
+                                                className={"shrink-0 rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"}>
+                                            {foodMutation.isPending ? "추천 중..." : "추천받기"}
+                                        </button>
+                                    </div>
+
+                                    {currentSake && (
+                                        <div className={"mt-4 flex items-center gap-4 rounded-xl bg-gray-50 p-4"}>
+                                            <div className={"flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white"}>
+                                                <img src={currentSake.imageUrl || "/images/sake-placeholder.png"}
+                                                     alt={currentSake.nameKo || currentSake.nameJa}
+                                                     className={"h-full w-full object-contain"}/>
+                                            </div>
+
+                                            <div>
+                                                <p className={"text-sm font-medium text-gray-500"}>
+                                                    선택한 사케
+                                                </p>
+
+                                                <p className={"mt-1 font-bold text-gray-900"}>
+                                                    {currentSake.nameKo || currentSake.nameJa}
+                                                </p>
+
+                                                {currentSake.nameKo && (
+                                                    <p className={"mt-1 text-sm text-gray-400"}>
+                                                        {currentSake.nameJa}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
-                                </div>
 
-                                <button
-                                    type={"button"}
-                                    onClick={handleFoodRecommend}
-                                    disabled={!selectedSake || foodMutation.isPending}
-                                    className={"shrink-0 rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"}
-                                >
-                                    {foodMutation.isPending ? "추천 중..." : "추천받기"}
-                                </button>
-                            </div>
-
-                            {selectedSake && (
-                                <div className={"mt-4 flex items-center gap-4 rounded-xl bg-gray-50 p-4"}>
-                                    <div className={"flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white"}>
-                                        <img
-                                            src={selectedSake.imageUrl || "/images/sake-placeholder.png"}
-                                            alt={selectedSake.nameKo || selectedSake.nameJa}
-                                            className={"h-full w-full object-contain"}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <p className={"text-sm font-medium text-gray-500"}>
-                                            선택한 사케
+                                    {hasInitialSake && initialSakeQuery.isError && (
+                                        <p className={"mt-4 text-sm text-red-600"}>
+                                            사케 정보를 불러오지 못했습니다.
                                         </p>
-
-                                        <p className={"mt-1 font-bold text-gray-900"}>
-                                            {selectedSake.nameKo || selectedSake.nameJa}
-                                        </p>
-
-                                        {selectedSake.nameKo && (
-                                            <p className={"mt-1 text-sm text-gray-400"}>
-                                                {selectedSake.nameJa}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
+                                    )}
+                                </>
                             )}
                         </section>
 
@@ -404,7 +407,7 @@ export default function RecommendPage(){
                             <section className={"mt-10"}>
                                 <div className={"mb-5"}>
                                     <h2 className={"text-2xl font-bold text-gray-900"}>
-                                        {selectedSake?.nameKo || selectedSake?.nameJa}와 어울리는 음식
+                                        {currentSake?.nameKo || currentSake?.nameJa}와 어울리는 음식
                                     </h2>
 
                                     <p className={"mt-1 text-sm text-gray-500"}>
@@ -414,10 +417,8 @@ export default function RecommendPage(){
 
                                 <div className={"grid gap-6 md:grid-cols-3"}>
                                     {foodMutation.data.recommends.map((recommendedFood,index)=>(
-                                        <article
-                                            key={`${recommendedFood.name}-${index}`}
-                                            className={"rounded-2xl border border-gray-200 bg-white p-6"}
-                                        >
+                                        <article key={`${recommendedFood.name}-${index}`}
+                                                 className={"rounded-2xl border border-gray-200 bg-white p-6"}>
                                             <div className={"mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white"}>
                                                 {index+1}
                                             </div>

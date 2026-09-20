@@ -15,9 +15,6 @@ export default function Header (){
                     <Link href={"/recommend"} className={"transition hover:text-gray-900"}>
                         AI 페어링
                     </Link>
-                    <Link href={"/like"} className={"transition hover:text-gray-900"}>
-                        찜
-                    </Link>
                 </nav>
             </div>
         </header>

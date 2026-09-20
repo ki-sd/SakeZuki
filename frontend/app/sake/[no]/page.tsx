@@ -7,6 +7,7 @@ import {getSakeDetail} from "@/app/api/sake";
 import Header from "@/components/layout/Header";
 import Link from "next/link";
 import {getSakeTypeLabel,getPrefectureLabel} from "@/commons/sake";
+import BreweryMap from "@/components/brewery/BreweryMap";
 
 type DetailTab="sake" | "brand" | "brewery";
 
@@ -111,7 +112,12 @@ export default function SakeDetailPage(){
                                 </span>
                             )}
                         </div>
+                        <Link href={`/recommend?sakeNo=${data.no}`}
+                            className={"mt-6 inline-flex w-fit items-center justify-center rounded-lg border border-gray-900 px-5 py-2.5 text-sm font-semibold text-gray-900 transition hover:bg-gray-900 hover:text-white"}>
+                            이 사케와 어울리는 음식 찾기
+                        </Link>
                     </div>
+
                 </section>
 
                 {/* 상세정보 탭 */}
@@ -192,62 +198,71 @@ export default function SakeDetailPage(){
 
                         {/* 양조장 정보 */}
                         {activeTab==="brewery" && (
-                            <div className={"grid gap-x-12 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
-                                <InfoItem label="양조장" value={data.brewery.nameKo || data.brewery.nameJa}
-                                    subValue={data.brewery.nameKo ? data.brewery.nameJa : null}/>
+                            <>
+                                <div className={"grid gap-x-12 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
+                                    <InfoItem label="양조장" value={data.brewery.nameKo || data.brewery.nameJa}
+                                              subValue={data.brewery.nameKo ? data.brewery.nameJa : null}/>
 
-                                <InfoItem label="읽는 법"
-                                    value={data.brewery.nameKana}/>
+                                    <InfoItem label="읽는 법"
+                                              value={data.brewery.nameKana}/>
 
-                                <InfoItem label="법인명"
-                                    value={data.brewery.corporationName}/>
+                                    <InfoItem label="법인명"
+                                              value={data.brewery.corporationName}/>
 
-                                <InfoItem label="창업"
-                                    value={data.brewery.foundedYear}/>
+                                    <InfoItem label="창업"
+                                              value={data.brewery.foundedYear}/>
 
-                                <InfoItem label="대표자"
-                                    value={data.brewery.ceo}/>
+                                    <InfoItem label="대표자"
+                                              value={data.brewery.ceo}/>
 
-                                <InfoItem label="지역"
-                                    value={getPrefectureLabel(data.brewery.prefecture)}
-                                    subValue={data.brewery.prefecture}/>
+                                    <InfoItem label="지역"
+                                              value={getPrefectureLabel(data.brewery.prefecture)}
+                                              subValue={data.brewery.prefecture}/>
 
-                                <InfoItem label="주소"
-                                    value={data.brewery.address}/>
+                                    <InfoItem label="주소"
+                                              value={data.brewery.address}/>
 
-                                <InfoItem label="우편번호"
-                                    value={data.brewery.post}/>
+                                    <InfoItem label="우편번호"
+                                              value={data.brewery.post}/>
 
-                                <InfoItem label="전화"
-                                    value={data.brewery.phone}/>
+                                    <InfoItem label="전화"
+                                              value={data.brewery.phone}/>
 
-                                <InfoItem label="팩스"
-                                    value={data.brewery.fax}/>
+                                    <InfoItem label="팩스"
+                                              value={data.brewery.fax}/>
 
-                                <InfoItem label="이메일"
-                                    value={data.brewery.email}/>
+                                    <InfoItem label="이메일"
+                                              value={data.brewery.email}/>
 
-                                <InfoItem label="견학"
-                                    value={data.brewery.tourAvailable===true
-                                        ? "가능"
-                                        : data.brewery.tourAvailable===false
-                                            ? "불가"
-                                            : null
-                                    }/>
+                                    <InfoItem label="견학"
+                                              value={data.brewery.tourAvailable===true
+                                                  ? "가능"
+                                                  : data.brewery.tourAvailable===false
+                                                      ? "불가"
+                                                      : null
+                                              }/>
 
-                                {data.brewery.website && (
-                                    <div>
-                                        <p className={"text-sm text-gray-500"}>
-                                            홈페이지
-                                        </p>
+                                    {data.brewery.website && (
+                                        <div>
+                                            <p className={"text-sm text-gray-500"}>
+                                                홈페이지
+                                            </p>
 
-                                        <a href={data.brewery.website} target="_blank" rel="noopener noreferrer"
-                                           className={"mt-1 inline-block font-medium text-gray-900 underline underline-offset-4"}>
-                                            홈페이지 방문
-                                        </a>
-                                    </div>
+                                            <a href={data.brewery.website} target="_blank" rel="noopener noreferrer"
+                                               className={"mt-1 inline-block font-medium text-gray-900 underline underline-offset-4"}>
+                                                홈페이지 방문
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {data.brewery.address && (
+                                    <BreweryMap
+                                        name={data.brewery.nameJa}
+                                        address={data.brewery.address}
+                                    />
                                 )}
-                            </div>
+                            </>
                         )}
                     </div>
                 </section>
