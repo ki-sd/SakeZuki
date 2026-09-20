@@ -15,19 +15,19 @@ export default function BreweryMap({name,address}:BreweryMapProps){
     const googleMapsUrl=`https://www.google.com/maps/search/?api=1&query=${query}`;
 
     return (
-        <div className={"mt-10"}>
-            <p className={"mb-3 text-sm text-gray-500"}>
+        <div className={"mt-8 border-t border-stone-200 pt-7"}>
+            <p className={"mb-3 text-sm font-medium text-stone-700"}>
                 위치
             </p>
 
-            <div className={"overflow-hidden rounded-xl border border-gray-200"}>
+            <div className={"overflow-hidden rounded-lg border border-stone-200 bg-stone-100"}>
                 <iframe src={mapUrl} title={`${name} 위치`}
                         loading={"lazy"} referrerPolicy={"strict-origin-when-cross-origin"}
-                        className={"h-[400px] w-full border-0"} allowFullScreen/>
+                        className={"h-64 w-full border-0 sm:h-80"} allowFullScreen/>
             </div>
 
             <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer"
-               className={"mt-3 inline-block text-sm font-medium text-gray-700 underline underline-offset-4 hover:text-gray-900"}>
+               className={"mt-3 inline-block rounded-sm text-sm font-medium text-stone-700 underline underline-offset-4 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
                 Google 지도에서 보기
             </a>
         </div>

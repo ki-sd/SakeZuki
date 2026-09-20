@@ -31,8 +31,11 @@ export default function SakeDetailPage(){
         return (
             <>
                 <Header/>
-                <main className={"mx-auto max-w-7xl px-6 py-20 text-center text-gray-500"}>
-                    불러오는 중...
+                <main className={"page-shell py-10"}>
+                    <div className={"ui-panel grid animate-pulse gap-6 p-5 sm:grid-cols-[minmax(0,280px)_1fr]"} aria-label={"사케 정보 불러오는 중"}>
+                        <div className={"aspect-4/5 rounded bg-stone-100"}/>
+                        <div className={"space-y-4 py-4"}><div className={"h-6 w-2/3 rounded bg-stone-100"}/><div className={"h-4 w-1/2 rounded bg-stone-100"}/></div>
+                    </div>
                 </main>
             </>
         )
@@ -41,8 +44,8 @@ export default function SakeDetailPage(){
         return (
             <>
                 <Header/>
-                <main className={"mx-auto max-w-7xl px-6 py-20 text-center text-gray-500"}>
-                    정보를 불러오지 못했습니다.
+                <main className={"page-shell py-10"}>
+                    <div className={"ui-state"}>정보를 불러오지 못했습니다.</div>
                 </main>
             </>
         );
@@ -51,69 +54,69 @@ export default function SakeDetailPage(){
         <>
             <Header/>
 
-            <main className={"mx-auto w-full max-w-7xl px-6 py-10"}>
+            <main className={"page-shell pb-16 pt-7 sm:pt-9"}>
                 <Link href="/sake"
-                    className={"mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition hover:text-gray-900"}>
+                    className={"mb-6 inline-flex items-center gap-2 rounded-sm text-sm font-medium text-stone-500 transition hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
                     <span>←</span>
                     <span>목록으로 돌아가기</span>
                 </Link>
                 {/* 사케 기본정보 */}
-                <section className={"grid gap-10 md:grid-cols-[360px_1fr] md:items-center"}>
-                    <div className={"overflow-hidden rounded-xl border border-gray-200 bg-white"}>
-                        <div className={"h-[480px] bg-gray-50"}>
+                <section className={"grid gap-7 sm:grid-cols-[minmax(0,280px)_1fr] sm:gap-9 lg:grid-cols-[minmax(0,340px)_1fr] lg:gap-12"}>
+                    <div className={"overflow-hidden rounded-lg border border-stone-200 bg-white"}>
+                        <div className={"aspect-4/5 bg-stone-100 p-5 sm:aspect-auto sm:h-full sm:min-h-88"}>
                             <img src={data.imageUrl || "/images/sake-placeholder.png"}
                                 alt={data.nameKo || data.nameJa} className={"h-full w-full object-contain"}/>
                         </div>
                     </div>
 
-                    <div className={"flex flex-col justify-center"}>
-                        <p className={"text-sm font-medium text-gray-900"}>
+                    <div className={"flex min-w-0 flex-col justify-center"}>
+                        <p className={"text-sm font-medium text-stone-700"}>
                             {getSakeTypeLabel(data.sakeType)}
                         </p>
 
                         {data.sakeType && (
-                            <p className={"mt-1 text-xs text-gray-400"}>
+                            <p className={"mt-1 text-xs text-stone-500"}>
                                 {data.sakeType}
                             </p>
                         )}
 
-                        <h1 className={"mt-2 text-3xl font-bold text-gray-900"}>
+                        <h1 className={"mt-2 break-words text-2xl font-semibold leading-tight tracking-tight text-stone-900 sm:text-3xl [overflow-wrap:anywhere]"}>
                             {data.nameKo || data.nameJa}
                         </h1>
 
                         {data.nameKo && (
-                            <p className={"mt-2 text-lg text-gray-500"}>
+                            <p className={"mt-2 break-words text-sm leading-6 text-stone-600 [overflow-wrap:anywhere]"}>
                                 {data.nameJa}
                             </p>
                         )}
 
                         {data.nameKana && (
-                            <p className={"mt-1 text-sm text-gray-400"}>
+                            <p className={"mt-1 text-xs text-stone-500"}>
                                 {data.nameKana}
                             </p>
                         )}
 
-                        <div className={"mt-6 flex flex-wrap gap-2"}>
+                        <div className={"mt-5 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-stone-600"}>
                             {data.brewery?.prefecture && (
-                                <span className={"rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600"}>
+                                <span>
                                     {getPrefectureLabel(data.brewery.prefecture)}
                                 </span>
                             )}
 
                             {data.brand?.nameJa && (
-                                <span className={"rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600"}>
+                                <span>
                                     {data.brand.nameKo || data.brand.nameJa}
                                 </span>
                             )}
 
                             {data.brewery?.nameJa && (
-                                <span className={"rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600"}>
+                                <span>
                                     {data.brewery.nameKo || data.brewery.nameJa}
                                 </span>
                             )}
                         </div>
                         <Link href={`/recommend?sakeNo=${data.no}`}
-                            className={"mt-6 inline-flex w-fit items-center justify-center rounded-lg border border-gray-900 px-5 py-2.5 text-sm font-semibold text-gray-900 transition hover:bg-gray-900 hover:text-white"}>
+                            className={"ui-button-secondary mt-6 w-fit max-w-full text-center"}>
                             이 사케와 어울리는 음식 찾기
                         </Link>
                     </div>
@@ -121,43 +124,43 @@ export default function SakeDetailPage(){
                 </section>
 
                 {/* 상세정보 탭 */}
-                <section className={"mt-12"}>
-                    <div className={"flex border-b border-gray-200"}>
+                <section className={"mt-10 sm:mt-12"}>
+                    <div className={"flex border-b border-stone-200"}>
                         <button type="button" onClick={()=>setActiveTab("sake")}
-                            className={`px-6 py-3 text-sm font-medium transition ${
+                            className={`ui-tab ${
                                 activeTab==="sake"
-                                    ? "border-b-2 border-gray-900 text-gray-900"
-                                    : "text-gray-500 hover:text-gray-900"
+                                    ? "ui-tab-active"
+                                    : ""
                                 }`
                             }>
                             사케 정보
                         </button>
 
                         <button type="button" onClick={()=>setActiveTab("brand")}
-                            className={`px-6 py-3 text-sm font-medium transition ${
+                            className={`ui-tab ${
                                 activeTab==="brand"
-                                    ? "border-b-2 border-gray-900 text-gray-900"
-                                    : "text-gray-500 hover:text-gray-900"
+                                    ? "ui-tab-active"
+                                    : ""
                                 }`
                             }>
                             브랜드
                         </button>
 
                         <button type="button" onClick={()=>setActiveTab("brewery")}
-                            className={`px-6 py-3 text-sm font-medium transition ${
+                            className={`ui-tab ${
                                 activeTab==="brewery"
-                                    ? "border-b-2 border-gray-900 text-gray-900"
-                                    : "text-gray-500 hover:text-gray-900"
+                                    ? "ui-tab-active"
+                                    : ""
                                 }`
                             }>
                             양조장
                         </button>
                     </div>
 
-                    <div className={"min-h-[420px] py-8"}>
+                    <div className={"py-7"}>
                         {/* 사케 정보 */}
                         {activeTab==="sake" && (
-                            <div className={"grid gap-x-12 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
+                            <div className={"grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
                                 <InfoItem label="종류"
                                     value={getSakeTypeLabel(data.sakeType)}
                                     subValue={data.sakeType}/>
@@ -183,7 +186,7 @@ export default function SakeDetailPage(){
                         {activeTab==="brand" && (
                             <>
                                 {data.brand ? (
-                                    <div className={"grid gap-x-12 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
+                                    <div className={"grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
                                         <InfoItem label="브랜드명"
                                             value={data.brand.nameKo || data.brand.nameJa}
                                             subValue={data.brand.nameKo ? data.brand.nameJa : null}/>
@@ -199,7 +202,7 @@ export default function SakeDetailPage(){
                         {/* 양조장 정보 */}
                         {activeTab==="brewery" && (
                             <>
-                                <div className={"grid gap-x-12 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
+                                <div className={"grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"}>
                                     <InfoItem label="양조장" value={data.brewery.nameKo || data.brewery.nameJa}
                                               subValue={data.brewery.nameKo ? data.brewery.nameJa : null}/>
 
@@ -244,12 +247,12 @@ export default function SakeDetailPage(){
 
                                     {data.brewery.website && (
                                         <div>
-                                            <p className={"text-sm text-gray-500"}>
+                                            <p className={"text-xs text-stone-500"}>
                                                 홈페이지
                                             </p>
 
                                             <a href={data.brewery.website} target="_blank" rel="noopener noreferrer"
-                                               className={"mt-1 inline-block font-medium text-gray-900 underline underline-offset-4"}>
+                                               className={"mt-1 inline-block break-all font-medium text-stone-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-stone-700"}>
                                                 홈페이지 방문
                                             </a>
                                         </div>
@@ -280,10 +283,10 @@ interface InfoItemProps{
 function InfoItem({label,value,subValue}:InfoItemProps){
     return (
         <div>
-            <p className={"text-sm text-gray-500"}>{label}</p>
-            <p className={"mt-1 font-medium text-gray-900"}>{value || "-"}</p>
+            <p className={"text-xs text-stone-500"}>{label}</p>
+            <p className={"mt-1 break-words text-sm font-medium leading-6 text-stone-900 [overflow-wrap:anywhere]"}>{value || "정보 없음"}</p>
             {subValue && value!==subValue && (
-                <p className={"mt-1 text-sm text-gray-400"}>{subValue}</p>
+                <p className={"mt-0.5 break-words text-xs text-stone-500 [overflow-wrap:anywhere]"}>{subValue}</p>
             )}
         </div>
     );
@@ -291,7 +294,7 @@ function InfoItem({label,value,subValue}:InfoItemProps){
 // 정보 X
 function EmptyInfo(){
     return (
-        <div className={"py-10 text-center text-gray-500"}>
+        <div className={"ui-state"}>
             등록된 정보가 없습니다.
         </div>
     );

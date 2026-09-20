@@ -41,38 +41,38 @@ export default function SakePage(){
         <>
             <Header/>
 
-            <main>
+            <main className={"pb-16"}>
                 {/* 목록 상단 검색 영역 */}
-                <section className={"border-b border-gray-200 bg-gray-50"}>
-                    <div className={"mx-auto max-w-7xl px-6 py-12 text-center"}>
-                        <h1 className={"text-3xl font-bold text-gray-900"}>
-                            마음에 드는 사케를 찾아보세요
+                <section className={"border-b border-stone-200 bg-white"}>
+                    <div className={"page-shell py-8 sm:py-10"}>
+                        <h1 className={"text-2xl font-semibold tracking-tight text-stone-900"}>
+                            사케 찾기
                         </h1>
 
-                        <p className={"mt-3 text-gray-600"}>
-                            이름으로 원하는 사케를 검색할 수 있습니다.
+                        <p className={"mt-1.5 text-sm text-stone-500"}>
+                            이름을 검색하거나 종류로 살펴보세요.
                         </p>
 
-                        <form onSubmit={handleSearch} className={"mx-auto mt-6 flex max-w-xl"}>
-                            <input type="text" value={keyword}
+                        <form onSubmit={handleSearch} className={"mt-6 flex max-w-2xl gap-2"}>
+                            <input type="text" value={keyword} aria-label={"사케 이름 검색"}
                                    onChange={(e)=>setKeyword(e.target.value)}
                                    placeholder="사케 이름을 입력하세요"
-                                   className={"min-w-0 flex-1 rounded-l-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none focus:border-gray-500"}/>
+                                   className={"ui-input flex-1"}/>
 
                             <button type="submit"
-                                    className={"rounded-r-lg bg-gray-900 px-6 py-3 font-medium text-white transition hover:bg-gray-700"}>
+                                    className={"ui-button"}>
                                 검색
                             </button>
                         </form>
 
                         {/* 사케 종류 필터 */}
-                        <div className={"mt-6 flex flex-wrap justify-center gap-2"}>
+                        <div className={"mt-5 flex flex-wrap gap-1.5"} aria-label={"사케 종류 필터"}>
                             {SAKE_TYPES.filter((type)=>type.value!=="非公開").map((type)=>(
-                                <button key={type.value} type="button" onClick={()=>handleTypeChange(type.value)}
-                                        className={`rounded-full border px-4 py-2 text-sm transition ${
+                                <button key={type.value} type="button" onClick={()=>handleTypeChange(type.value)} aria-pressed={sakeType===type.value}
+                                        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700 ${
                                             sakeType===type.value
-                                                ? "border-gray-900 bg-gray-900 text-white"
-                                                : "border-gray-300 bg-white text-gray-600 hover:border-gray-500 hover:text-gray-900"
+                                                ? "border-stone-800 bg-stone-800 text-white"
+                                                : "border-stone-200 bg-white text-stone-600 hover:border-stone-500 hover:text-stone-900"
                                         }`}>
                                     {type.label}
                                 </button>
@@ -82,33 +82,38 @@ export default function SakePage(){
                 </section>
 
                 {/* 사케 목록 */}
-                <section className={"mx-auto w-full max-w-7xl px-6 py-8"}>
-                    <div className={"mb-6 flex items-end justify-between"}>
-                        <h2 className={"text-2xl font-bold text-gray-900"}>
+                <section className={"page-shell py-8 sm:py-10"}>
+                    <div className={"mb-5 flex items-end justify-between gap-3"}>
+                        <h2 className={"text-lg font-semibold text-stone-900"}>
                             사케 목록
                         </h2>
 
                         {data && (
-                            <p className={"text-sm text-gray-500"}>
+                            <p className={"shrink-0 text-sm tabular-nums text-stone-500"}>
                                 총 {data.count.toLocaleString()}개
                             </p>
                         )}
                     </div>
 
                     {isLoading && (
-                        <div className={"py-20 text-center text-gray-500"}>
-                            로딩 중...
+                        <div className={"grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"} aria-label={"사케 목록 불러오는 중"}>
+                            {Array.from({length:8},(_,index)=>(
+                                <div key={index} className={"ui-panel animate-pulse overflow-hidden"}>
+                                    <div className={"aspect-4/5 bg-stone-100"}/>
+                                    <div className={"space-y-2 p-4"}><div className={"h-4 w-3/4 rounded bg-stone-100"}/><div className={"h-3 w-1/2 rounded bg-stone-100"}/></div>
+                                </div>
+                            ))}
                         </div>
                     )}
 
                     {isError && (
-                        <div className={"py-20 text-center text-gray-500"}>
+                        <div className={"ui-state"}>
                             목록을 불러오지 못했습니다.
                         </div>
                     )}
 
                     {data && data.list.length===0 && (
-                        <div className={"py-20 text-center text-gray-500"}>
+                        <div className={"ui-state"}>
                             검색 결과가 없습니다.
                         </div>
                     )}
@@ -116,16 +121,16 @@ export default function SakePage(){
                     {data && data.list.length>0 && (
                         <>
                             {/* 조회된 사케 출력 */}
-                            <div className={"grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}>
+                            <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 ${isFetching ? "opacity-60" : ""}`} aria-busy={isFetching}>
                                 {data.list.map((sake)=>(
                                     <SakeCard key={sake.no} sake={sake}/>
                                 ))}
                             </div>
 
                             {/* 페이지네이션 */}
-                            <div className={"mt-10 flex items-center justify-center gap-1"}>
+                            <div className={"mt-9 flex flex-wrap items-center justify-center gap-1"}>
                                 <button type="button" onClick={()=>setPage(data.startPage-1)} disabled={data.startPage===1}
-                                    className={"rounded px-3 py-2 text-sm text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300"}>
+                                    className={"rounded-md px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700 disabled:cursor-not-allowed disabled:text-stone-300"}>
                                     이전
                                 </button>
 
@@ -134,17 +139,17 @@ export default function SakePage(){
                                     (_,index)=>data.startPage+index
                                 ).map((pageNumber)=>(
                                     <button key={pageNumber} type="button" onClick={()=>setPage(pageNumber)}
-                                        className={`h-9 min-w-9 rounded px-2 text-sm transition ${
+                                        className={`h-9 min-w-9 rounded-md px-2 text-sm tabular-nums transition focus-visible:outline-2 focus-visible:outline-stone-700 ${
                                             page===pageNumber
-                                                ? "bg-gray-900 font-medium text-white"
-                                                : "text-gray-600 hover:bg-gray-100"
+                                                ? "bg-stone-800 font-medium text-white"
+                                                : "text-stone-600 hover:bg-stone-100"
                                         }`}>
                                         {pageNumber}
                                     </button>
                                 ))}
 
                                 <button type="button" onClick={()=>setPage(data.endPage+1)} disabled={data.endPage===data.totalpage}
-                                    className={"rounded px-3 py-2 text-sm text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300"}>
+                                    className={"rounded-md px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700 disabled:cursor-not-allowed disabled:text-stone-300"}>
                                     다음
                                 </button>
                             </div>
