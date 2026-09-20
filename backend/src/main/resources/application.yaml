@@ -11,6 +11,17 @@ spring:
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
 
+  ai:
+    model:
+      chat: google-genai
+
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}
+
+        chat:
+          model: gemini-3.5-flash
+          temperature: 0.4
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml

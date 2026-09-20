@@ -59,6 +59,9 @@ public class SakeServiceImpl implements SakeService {
 
     @Override
     public SakeDetailResponse getSakeDetail(Long no){
+        if(no==null){
+            throw new IllegalArgumentException("존재하지 않는 사케입니다.");
+        }
         return sMapper.getSakeDetail(no);
     }
 

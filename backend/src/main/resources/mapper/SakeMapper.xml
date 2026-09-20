@@ -10,8 +10,10 @@
         <result property="nameKo" column="nameKo"/>
         <result property="sakeType" column="sakeType"/>
         <result property="rice" column="rice"/>
+        <result property="riceKo" column="riceKo"/>
         <result property="polishingRatio" column="polishingRatio"/>
         <result property="yeast" column="yeast"/>
+        <result property="yeastKo" column="yeastKo"/>
         <result property="sakeMeterValue" column="sakeMeterValue"/>
         <result property="acidity" column="acidity"/>
         <result property="alcoholPercentage" column="alcoholPercentage"/>
@@ -94,8 +96,10 @@
             s.name_ko AS nameKo,
             s.sake_type AS sakeType,
             s.rice,
+            s.rice_ko AS riceKo,
             s.polishing_ratio AS polishingRatio,
             s.yeast,
+            s.yeast_ko AS yeastKo,
             s.sake_meter_value AS sakeMeterValue,
             s.acidity,
             s.alcohol_percentage AS alcoholPercentage,

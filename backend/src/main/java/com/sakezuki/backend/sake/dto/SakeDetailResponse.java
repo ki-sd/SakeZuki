@@ -14,8 +14,10 @@ public class SakeDetailResponse {
     private String nameKo;
     private String sakeType;
     private String rice;
+    private String riceKo;
     private String polishingRatio;
     private String yeast;
+    private String yeastKo;
     private String sakeMeterValue;
     private String acidity;
     private String alcoholPercentage;

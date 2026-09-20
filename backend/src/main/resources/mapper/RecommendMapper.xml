@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sakezuki.backend.recommend.mapper.RecommendMapper">
+
+    <select id="getFoodRecommendList" parameterType="long" resultType="com.sakezuki.backend.recommend.dto.RecommendedFoodResponse">
+        SELECT name,
+            reason
+        FROM RECOMMEND_FOOD
+        WHERE sake_no=#{sakeNo}
+        ORDER BY no
+    </select>
+
+    <insert id="insertFoodRecommend">
+        INSERT INTO RECOMMEND_FOOD (sake_no,name,reason)
+        VALUES
+            <foreach collection="list" item="item" separator=",">
+                (#{sakeNo},#{item.name},#{item.reason})
+            </foreach>
+    </insert>
+
+</mapper>
