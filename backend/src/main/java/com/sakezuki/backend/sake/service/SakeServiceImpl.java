@@ -2,6 +2,7 @@ package com.sakezuki.backend.sake.service;
 
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.dto.SakeListResponse;
+import com.sakezuki.backend.sake.dto.SakeSearchResponse;
 import com.sakezuki.backend.sake.mapper.SakeMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -59,5 +60,13 @@ public class SakeServiceImpl implements SakeService {
     @Override
     public SakeDetailResponse getSakeDetail(Long no){
         return sMapper.getSakeDetail(no);
+    }
+
+    @Override
+    public List<SakeSearchResponse> searchSakeList(String search){
+        if(search==null || search.trim().isBlank()){
+            throw new IllegalArgumentException("잘못된 검색어입니다.");
+        }
+        return sMapper.searchSakeData(search.trim());
     }
 }

@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 public class GeminiTranslator {
-
     private static final String MODEL="gemini-3.5-flash";
+    private static final int MAX_RETRY=3;
 
     private final Client client;
 
@@ -23,8 +23,37 @@ public class GeminiTranslator {
     }
 
     public String translateBrands(String prompt){
-        // [{no:1,nameKo:"..."}, ...] 형태만 반환하도록 제한
+        return generate(prompt,createNameSchema());
+    }
+
+    public String translateSakeNames(String prompt){
+        return generate(prompt,createNameSchema());
+    }
+
+    public String translateTerms(String prompt){
         Schema schema=Schema.builder()
+                .type(Type.Known.ARRAY)
+                .items(
+                        Schema.builder()
+                                .type(Type.Known.OBJECT)
+                                .properties(Map.of(
+                                        "id",Schema.builder()
+                                                .type(Type.Known.INTEGER)
+                                                .build(),
+                                        "valueKo",Schema.builder()
+                                                .type(Type.Known.STRING)
+                                                .build()
+                                ))
+                                .required(List.of("id","valueKo"))
+                                .build()
+                )
+                .build();
+
+        return generate(prompt,schema);
+    }
+
+    private Schema createNameSchema(){
+        return Schema.builder()
                 .type(Type.Known.ARRAY)
                 .items(
                         Schema.builder()
@@ -41,24 +70,59 @@ public class GeminiTranslator {
                                 .build()
                 )
                 .build();
+    }
 
+    private String generate(String prompt,Schema schema){
         GenerateContentConfig config=GenerateContentConfig.builder()
                 .responseMimeType("application/json")
                 .responseSchema(schema)
+                .temperature(0.1f)
                 .build();
 
-        GenerateContentResponse response=client.models.generateContent(
-                MODEL,
-                prompt,
-                config
-        );
+        Exception lastException=null;
 
-        String result=response.text();
+        for(int attempt=1;attempt<=MAX_RETRY;attempt++){
+            try{
+                GenerateContentResponse response=client.models.generateContent(
+                        MODEL,
+                        prompt,
+                        config
+                );
 
-        if(result==null || result.isBlank()){
-            throw new IllegalStateException("Gemini 응답이 비어 있습니다.");
+                String result=response.text();
+
+                if(result==null || result.isBlank()){
+                    throw new IllegalStateException("Gemini 응답이 비어 있습니다.");
+                }
+
+                return result;
+            }catch(Exception e){
+                lastException=e;
+
+                System.err.println(
+                        "Gemini 호출 실패 ("+
+                                attempt+"/"+MAX_RETRY+"): "+
+                                e.getMessage()
+                );
+
+                if(attempt<MAX_RETRY){
+                    try{
+                        Thread.sleep(2000L*attempt);
+                    }catch(InterruptedException interruptedException){
+                        Thread.currentThread().interrupt();
+
+                        throw new IllegalStateException(
+                                "Gemini 재시도 대기 중 중단되었습니다.",
+                                interruptedException
+                        );
+                    }
+                }
+            }
         }
 
-        return result;
+        throw new IllegalStateException(
+                "Gemini 호출이 "+MAX_RETRY+"회 모두 실패했습니다.",
+                lastException
+        );
     }
 }

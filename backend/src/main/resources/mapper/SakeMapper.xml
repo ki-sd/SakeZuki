@@ -129,4 +129,28 @@
         WHERE s.no=#{no}
     </select>
 
+    <select id="searchSakeData" resultType="com.sakezuki.backend.sake.dto.SakeSearchResponse" parameterType="string">
+        SELECT
+            no,
+            name_ko AS nameKo,
+            name_ja AS nameJa,
+            name_kana AS nameKana,
+            image_url AS imageUrl
+        FROM SAKE
+        WHERE name_ko LIKE CONCAT('%',#{search},'%')
+            OR name_ja LIKE CONCAT('%',#{search},'%')
+            OR name_kana LIKE CONCAT('%',#{search},'%')
+        ORDER BY
+            CASE
+                WHEN name_ko=#{search} OR name_ja=#{search} OR name_kana=#{search} THEN 1
+                WHEN name_ko LIKE CONCAT(#{search},'%')
+                    OR name_ja LIKE CONCAT(#{search},'%')
+                    OR name_kana LIKE CONCAT(#{search},'%') THEN 2
+                ELSE 3
+            END,
+            image_url IS NOT NULL DESC,
+            no DESC
+        LIMIT 10
+    </select>
+
 </mapper>

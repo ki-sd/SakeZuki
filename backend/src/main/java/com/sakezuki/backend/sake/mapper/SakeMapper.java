@@ -2,6 +2,7 @@ package com.sakezuki.backend.sake.mapper;
 
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.dto.SakeListResponse;
+import com.sakezuki.backend.sake.dto.SakeSearchResponse;
 import org.apache.ibatis.annotations.Mapper;
 import java.util.*;
 
@@ -13,4 +14,6 @@ public interface SakeMapper {
     public int sakeListCount(Map<String,Object> map);
     // 사케 상세
     public SakeDetailResponse getSakeDetail(Long no);
+    // 사케 검색
+    public List<SakeSearchResponse> searchSakeData(String search);
 }

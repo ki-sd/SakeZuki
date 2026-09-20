@@ -2,6 +2,7 @@ package com.sakezuki.backend.sake.controller;
 
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.dto.SakeListResponse;
+import com.sakezuki.backend.sake.dto.SakeSearchResponse;
 import com.sakezuki.backend.sake.service.SakeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,5 +29,10 @@ public class SakeController {
     @GetMapping("/{no}")
     public ResponseEntity<SakeDetailResponse> sakeDetail(@PathVariable("no") Long no){
         return ResponseEntity.ok(sService.getSakeDetail(no));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<SakeSearchResponse>> sakeSearch(@RequestParam("search") String search){
+        return ResponseEntity.ok(sService.searchSakeList(search));
     }
 }
