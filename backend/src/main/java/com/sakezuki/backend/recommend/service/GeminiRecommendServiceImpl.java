@@ -2,6 +2,7 @@ package com.sakezuki.backend.recommend.service;
 
 import com.sakezuki.backend.recommend.dto.AiFoodRecommendResponse;
 import com.sakezuki.backend.recommend.dto.RecommendedFoodResponse;
+import com.sakezuki.backend.recommend.dto.SakeRecommendCondition;
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -102,5 +103,58 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
                 throw new IllegalStateException("추천 이유가 비어있습니다.");
             }
         }
+    }
+
+    @Override
+    public SakeRecommendCondition analyzeFood(String food){
+        String prompt="""
+            당신은 일본주와 음식 페어링을 분석하는 전문가입니다.
+
+            사용자가 입력한 음식의 맛, 향, 지방감, 감칠맛, 단맛, 짠맛 등을 분석하고
+            해당 음식과 잘 어울릴 가능성이 높은 사케를 데이터베이스에서 검색하기 위한
+            조건을 생성하세요.
+
+            음식:
+            %s
+
+            사용할 수 있는 조건:
+            - sakeTypes는 음식과 어울리는 사케 종류를 나타냅니다.
+            - sakeTypes는 반드시 아래 값 중에서만 선택하세요.
+                純米吟醸酒, 純米酒, 純米大吟醸酒, 大吟醸酒, 本醸造酒, 特別純米酒,
+                吟醸酒, 普通酒, 特別本醸造酒, 原酒, 生原酒, スパークリング,
+                古酒, リキュール, 純米生原酒, 貴醸酒, 本吟醸酒
+                - 위 목록에 없는 영어명이나 새로운 분류명을 만들지 마세요.
+                - 음식과의 페어링에 도움이 되는 종류만 선택하세요.
+                - 적절한 종류를 특정하기 어렵다면 빈 배열로 반환하세요.
+            - sakeMeterMin, sakeMeterMax: 일본주도 범위
+            - acidityMin, acidityMax: 산도 범위
+            - polishingRatioMin, polishingRatioMax: 정미보합 범위
+
+            주의사항:
+            - 이것은 최종 사케 추천이 아니라 DB 후보 검색을 위한 조건입니다.
+            - 모든 조건을 반드시 채울 필요는 없습니다.
+            - 음식만으로 합리적으로 판단하기 어려운 조건은 null로 두세요.
+            - 조건을 지나치게 좁혀 후보가 거의 없어지지 않도록 넓은 범위를 사용하세요.
+            - sakeTypes 역시 확실히 도움이 되는 경우에만 지정하세요.
+            - reason에는 왜 이런 검색 조건을 선택했는지 간단한 한국어 설명을 작성하세요.
+            - 실제 제품명이나 존재하지 않는 제품 정보를 만들어내지 마세요.
+            """.formatted(food);
+
+        SakeRecommendCondition condition=builder.build()
+                .prompt()
+                .user(prompt)
+                .call()
+                .entity(
+                        SakeRecommendCondition.class,
+                        spec->spec
+                                .useProviderStructuredOutput()
+                                .validateSchema()
+                );
+
+        if(condition==null){
+            throw new IllegalStateException("사케 추천 검색조건 생성에 실패했습니다.");
+        }
+
+        return condition;
     }
 }

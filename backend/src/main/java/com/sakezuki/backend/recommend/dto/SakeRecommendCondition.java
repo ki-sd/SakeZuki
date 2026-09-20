@@ -15,6 +15,7 @@ public class SakeRecommendCondition {
     private Double sakeMeterMax;
     private Double acidityMin;
     private Double acidityMax;
+    private Double polishingRatioMin;
     private Double polishingRatioMax;
     private String reason;
 }

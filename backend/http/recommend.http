@@ -13,3 +13,11 @@ Content-Type: application/json
 {
   "sakeNo": 123
 }
+
+### 음식 분석 테스트
+POST http://localhost:8080/api/recommend/sake/test
+Content-Type: application/json
+
+{
+  "food": "스키야키"
+}
