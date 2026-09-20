@@ -1,0 +1,15 @@
+### 음식 추천 - 최초 요청
+POST http://localhost:8080/api/recommend/food
+Content-Type: application/json
+
+{
+  "sakeNo": 123
+}
+
+### 음식 추천 - 캐시 확인
+POST http://localhost:8080/api/recommend/food
+Content-Type: application/json
+
+{
+  "sakeNo": 123
+}
