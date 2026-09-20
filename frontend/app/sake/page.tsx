@@ -69,7 +69,7 @@ export default function SakePage(){
                         <div className={"mt-5 flex flex-wrap gap-1.5"} aria-label={"사케 종류 필터"}>
                             {SAKE_TYPES.filter((type)=>type.value!=="非公開").map((type)=>(
                                 <button key={type.value} type="button" onClick={()=>handleTypeChange(type.value)} aria-pressed={sakeType===type.value}
-                                        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700 ${
+                                        className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700 ${
                                             sakeType===type.value
                                                 ? "border-stone-800 bg-stone-800 text-white"
                                                 : "border-stone-200 bg-white text-stone-600 hover:border-stone-500 hover:text-stone-900"
@@ -130,7 +130,7 @@ export default function SakePage(){
                             {/* 페이지네이션 */}
                             <div className={"mt-9 flex flex-wrap items-center justify-center gap-1"}>
                                 <button type="button" onClick={()=>setPage(data.startPage-1)} disabled={data.startPage===1}
-                                    className={"rounded-md px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700 disabled:cursor-not-allowed disabled:text-stone-300"}>
+                                    className={"cursor-pointer rounded-md px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700 disabled:cursor-not-allowed disabled:text-stone-300"}>
                                     이전
                                 </button>
 
@@ -139,7 +139,7 @@ export default function SakePage(){
                                     (_,index)=>data.startPage+index
                                 ).map((pageNumber)=>(
                                     <button key={pageNumber} type="button" onClick={()=>setPage(pageNumber)}
-                                        className={`h-9 min-w-9 rounded-md px-2 text-sm tabular-nums transition focus-visible:outline-2 focus-visible:outline-stone-700 ${
+                                        className={`h-9 min-w-9 cursor-pointer rounded-md px-2 text-sm tabular-nums transition focus-visible:outline-2 focus-visible:outline-stone-700 ${
                                             page===pageNumber
                                                 ? "bg-stone-800 font-medium text-white"
                                                 : "text-stone-600 hover:bg-stone-100"
@@ -149,7 +149,7 @@ export default function SakePage(){
                                 ))}
 
                                 <button type="button" onClick={()=>setPage(data.endPage+1)} disabled={data.endPage===data.totalpage}
-                                    className={"rounded-md px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700 disabled:cursor-not-allowed disabled:text-stone-300"}>
+                                    className={"cursor-pointer rounded-md px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700 disabled:cursor-not-allowed disabled:text-stone-300"}>
                                     다음
                                 </button>
                             </div>
