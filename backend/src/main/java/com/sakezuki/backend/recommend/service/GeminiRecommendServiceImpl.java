@@ -1,8 +1,6 @@
 package com.sakezuki.backend.recommend.service;
 
-import com.sakezuki.backend.recommend.dto.AiFoodRecommendResponse;
-import com.sakezuki.backend.recommend.dto.RecommendedFoodResponse;
-import com.sakezuki.backend.recommend.dto.SakeRecommendCondition;
+import com.sakezuki.backend.recommend.dto.*;
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -156,5 +154,128 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
         }
 
         return condition;
+    }
+
+    @Override
+    public List<SakeRerankItem> rerankSake(
+            String food,
+            SakeRecommendCondition condition,
+            List<SakeRecommendCandidate> candidates
+    ){
+        if(candidates==null || candidates.isEmpty()){
+            throw new IllegalArgumentException("추천할 사케 후보가 없습니다.");
+        }
+
+        StringBuilder candidateText=new StringBuilder();
+
+        for(SakeRecommendCandidate candidate:candidates){
+            candidateText.append("""
+                [sakeNo=%d]
+                이름: %s / %s
+                종류: %s
+                쌀: %s / %s
+                정미보합: %s
+                일본주도: %s
+                산도: %s
+                알코올 도수: %s
+                지역: %s
+
+                """.formatted(
+                    candidate.getNo(),
+                    value(candidate.getNameKo()),
+                    value(candidate.getNameJa()),
+                    value(candidate.getSakeType()),
+                    value(candidate.getRiceKo()),
+                    value(candidate.getRice()),
+                    value(candidate.getPolishingRatio()),
+                    value(candidate.getSakeMeterValue()),
+                    value(candidate.getAcidity()),
+                    value(candidate.getAlcoholPercentage()),
+                    value(candidate.getPrefecture())
+            ));
+        }
+
+        String prompt="""
+            당신은 일본주와 음식 페어링을 분석하는 전문가입니다.
+
+            사용자가 입력한 음식과 DB에서 검색된 사케 후보를 비교하여
+            가장 잘 어울리는 사케를 정확히 3개 선택하세요.
+
+            음식:
+            %s
+
+            1차 검색조건:
+            사케 종류: %s
+            일본주도: %s ~ %s
+            산도: %s ~ %s
+            정미보합: %s ~ %s
+            조건 생성 이유: %s
+
+            후보:
+            %s
+
+            규칙:
+            - 반드시 제공된 후보 안에서만 선택하세요.
+            - 정확히 3개의 서로 다른 sakeNo를 선택하세요.
+            - sakeNo는 후보에 표시된 값을 그대로 사용하세요.
+            - 후보에 없는 사케나 제품 정보를 만들어내지 마세요.
+            - DB에 없는 수치, 원료, 제조법 등의 제품 고유 사실을 추측하지 마세요.
+            - 1차 검색조건은 후보 검색을 위한 참고 정보이며 절대적인 정답이 아닙니다.
+            - 음식의 맛, 향, 감칠맛, 지방감, 단맛, 짠맛 등과 후보의 실제 정보를 종합하여 비교하세요.
+            - 값이 없는 항목은 알 수 없는 정보이므로 추측하지 마세요.
+            - reason은 사용자에게 보여줄 자연스러운 한국어 추천 이유로 작성하세요.
+            - reason에서는 실제 후보 데이터와 일반적인 사케 페어링 원리를 활용할 수 있습니다.
+            - 같은 이유를 세 제품에 반복하지 말고 각 제품을 선택한 이유가 드러나도록 작성하세요.
+            """.formatted(
+                food,
+                condition.getSakeTypes(),
+                condition.getSakeMeterMin(),
+                condition.getSakeMeterMax(),
+                condition.getAcidityMin(),
+                condition.getAcidityMax(),
+                condition.getPolishingRatioMin(),
+                condition.getPolishingRatioMax(),
+                condition.getReason(),
+                candidateText
+        );
+
+        SakeRerankResponse response=builder.build()
+                .prompt()
+                .user(prompt)
+                .call()
+                .entity(
+                        SakeRerankResponse.class,
+                        spec->spec
+                                .useProviderStructuredOutput()
+                                .validateSchema()
+                );
+
+        if(response==null
+                || response.getRecommendations()==null
+                || response.getRecommendations().size()!=3){
+            throw new IllegalStateException("사케 추천 결과가 올바르지 않습니다.");
+        }
+
+        List<Long> candidateNos=candidates.stream()
+                .map(SakeRecommendCandidate::getNo)
+                .toList();
+
+        List<Long> resultNos=response.getRecommendations().stream()
+                .map(SakeRerankItem::getSakeNo)
+                .toList();
+
+        if(resultNos.stream().distinct().count()!=3){
+            throw new IllegalStateException("중복된 사케가 추천되었습니다.");
+        }
+
+        if(!candidateNos.containsAll(resultNos)){
+            throw new IllegalStateException("후보에 없는 사케가 추천되었습니다.");
+        }
+
+        return response.getRecommendations();
+    }
+
+    private String value(Object value){
+        return value!=null ? value.toString() : "정보 없음";
     }
 }

@@ -21,3 +21,19 @@ Content-Type: application/json
 {
   "food": "스키야키"
 }
+
+### 음식 기반 사케 AI reranking 테스트
+POST http://localhost:8080/api/recommend/sake/test
+Content-Type: application/json
+
+{
+  "food": "스키야키"
+}
+
+### 음식 → 사케 추천
+POST http://localhost:8080/api/recommend/sake
+Content-Type: application/json
+
+{
+  "food": "삼겹살"
+}

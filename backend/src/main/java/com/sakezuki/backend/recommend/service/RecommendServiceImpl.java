@@ -1,7 +1,6 @@
 package com.sakezuki.backend.recommend.service;
 
-import com.sakezuki.backend.recommend.dto.FoodRecommendResponse;
-import com.sakezuki.backend.recommend.dto.RecommendedFoodResponse;
+import com.sakezuki.backend.recommend.dto.*;
 import com.sakezuki.backend.recommend.mapper.RecommendMapper;
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.service.SakeService;
@@ -32,6 +31,59 @@ public class RecommendServiceImpl implements RecommendService {
         return FoodRecommendResponse.builder()
                 .sakeNo(sakeNo)
                 .recommends(recommends)
+                .build();
+    }
+
+    @Override
+    public SakeRecommendResponse sakeRecommendList(String food){
+        if(food==null || food.isBlank()){
+            throw new IllegalArgumentException("음식명이 비어있습니다.");
+        }
+
+        String normalizedFood=food.trim();
+
+        List<RecommendedSakeResponse> recommendations=
+                rMapper.getSakeRecommendList(normalizedFood);
+
+        if(recommendations.isEmpty()){
+            long start=System.currentTimeMillis();
+
+            SakeRecommendCondition condition=gService.analyzeFood(normalizedFood);
+            long analyzeEnd=System.currentTimeMillis();
+
+            List<SakeRecommendCandidate> candidates=
+                    rMapper.getSakeRecommendCandidates(condition);
+            long retrievalEnd=System.currentTimeMillis();
+
+            if(candidates.isEmpty()){
+                throw new IllegalStateException("추천 가능한 사케 후보가 없습니다.");
+            }
+
+            List<SakeRerankItem> rerankItems=
+                    gService.rerankSake(
+                            normalizedFood,
+                            condition,
+                            candidates
+                    );
+            long rerankEnd=System.currentTimeMillis();
+
+//            System.out.println("1차 Gemini: "+(analyzeEnd-start)+"ms");
+//            System.out.println("DB Retrieval: "+(retrievalEnd-analyzeEnd)+"ms");
+//            System.out.println("2차 Gemini: "+(rerankEnd-retrievalEnd)+"ms");
+//            System.out.println("총 AI 추천: "+(rerankEnd-start)+"ms");
+
+            rMapper.insertSakeRecommend(normalizedFood,rerankItems);
+
+            recommendations=rMapper.getSakeRecommendList(normalizedFood);
+        }
+
+        if(recommendations.size()!=3){
+            throw new IllegalStateException("사케 추천 결과가 3개가 아닙니다.");
+        }
+
+        return SakeRecommendResponse.builder()
+                .food(normalizedFood)
+                .recommendations(recommendations)
                 .build();
     }
 }

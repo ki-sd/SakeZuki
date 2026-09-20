@@ -18,8 +18,160 @@
             </foreach>
     </insert>
 
-    <select id="getSakeRecommendCandidate">
+    <select id="getSakeRecommendCandidates" parameterType="com.sakezuki.backend.recommend.dto.SakeRecommendCondition"
+            resultType="com.sakezuki.backend.recommend.dto.SakeRecommendCandidate">
 
+        SELECT
+        s.no,
+        s.name_ko AS nameKo,
+        s.name_ja AS nameJa,
+        s.sake_type AS sakeType,
+        s.rice_ko AS riceKo,
+        s.rice AS rice,
+        s.polishing_ratio AS polishingRatio,
+        s.yeast_ko AS yeastKo,
+        s.yeast AS yeast,
+        s.sake_meter_value AS sakeMeterValue,
+        s.acidity,
+        s.alcohol_percentage AS alcoholPercentage,
+        b.name_ko AS breweryNameKo,
+        b.prefecture,
+        (
+        CASE
+        <if test="sakeTypes!=null and !sakeTypes.isEmpty()">
+            WHEN s.sake_type IN
+            <foreach collection="sakeTypes"
+                     item="type"
+                     open="("
+                     separator=","
+                     close=")">
+                #{type}
+            </foreach>
+            THEN 3
+        </if>
+        ELSE 0
+        END
+
+        +
+
+        CASE
+        <if test="sakeMeterMin!=null and sakeMeterMax!=null">
+            WHEN
+            (
+            srp.sake_meter_max IS NULL
+            OR srp.sake_meter_max &gt;=#{sakeMeterMin}
+            )
+            AND
+            (
+            srp.sake_meter_min IS NULL
+            OR srp.sake_meter_min &lt;=#{sakeMeterMax}
+            )
+            AND
+            (
+            srp.sake_meter_min IS NOT NULL
+            OR srp.sake_meter_max IS NOT NULL
+            )
+            THEN 2
+        </if>
+        ELSE 0
+        END
+
+        +
+
+        CASE
+        <if test="acidityMin!=null and acidityMax!=null">
+            WHEN
+            (
+            srp.acidity_max IS NULL
+            OR srp.acidity_max &gt;=#{acidityMin}
+            )
+            AND
+            (
+            srp.acidity_min IS NULL
+            OR srp.acidity_min &lt;=#{acidityMax}
+            )
+            AND
+            (
+            srp.acidity_min IS NOT NULL
+            OR srp.acidity_max IS NOT NULL
+            )
+            THEN 2
+        </if>
+        ELSE 0
+        END
+
+        +
+
+        CASE
+        <if test="polishingRatioMin!=null and polishingRatioMax!=null">
+            WHEN
+            (
+            srp.polishing_ratio_max IS NULL
+            OR srp.polishing_ratio_max &gt;=#{polishingRatioMin}
+            )
+            AND
+            (
+            srp.polishing_ratio_min IS NULL
+            OR srp.polishing_ratio_min &lt;=#{polishingRatioMax}
+            )
+            AND
+            (
+            srp.polishing_ratio_min IS NOT NULL
+            OR srp.polishing_ratio_max IS NOT NULL
+            )
+            THEN 1
+        </if>
+        ELSE 0
+        END
+        ) AS score
+
+        FROM SAKE s
+
+        JOIN SAKE_RECOMMEND_PROFILE srp
+        ON srp.sake_no=s.no
+
+        LEFT JOIN BRAND br
+        ON br.no=s.brand_no
+
+        LEFT JOIN BREWERY b
+        ON b.no=br.brewery_no
+
+        ORDER BY score DESC,s.no
+
+        LIMIT 40
     </select>
+
+    <select id="getSakeRecommendList" parameterType="string"
+            resultType="com.sakezuki.backend.recommend.dto.RecommendedSakeResponse">
+        SELECT
+        s.no,
+        s.name_ko AS nameKo,
+        s.name_ja AS nameJa,
+        s.image_url AS imageUrl,
+        s.sake_type AS sakeType,
+        b.prefecture,
+        s.polishing_ratio AS polishingRatio,
+        s.acidity,
+        s.alcohol_percentage AS alcoholPercentage,
+        b.name_ko AS breweryNameKo,
+        rs.reason
+        FROM RECOMMEND_SAKE rs
+        JOIN SAKE s
+        ON s.no=rs.sake_no
+        LEFT JOIN BRAND br
+        ON br.no=s.brand_no
+        LEFT JOIN BREWERY b
+        ON b.no=br.brewery_no
+        WHERE rs.food=#{food}
+        ORDER BY rs.no
+    </select>
+
+    <insert id="insertSakeRecommend">
+        INSERT INTO RECOMMEND_SAKE(food,sake_no,reason)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{food},#{item.sakeNo},#{item.reason})
+        </foreach>
+    </insert>
 
 </mapper>
