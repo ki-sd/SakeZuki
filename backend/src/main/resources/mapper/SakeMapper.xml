@@ -138,7 +138,6 @@
             no,
             name_ko AS nameKo,
             name_ja AS nameJa,
-            name_kana AS nameKana,
             image_url AS imageUrl
         FROM SAKE
         WHERE name_ko LIKE CONCAT('%',#{search},'%')

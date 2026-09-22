@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type {SakeListItem} from "@/types/sake";
 import {getSakeTypeLabel,getPrefectureLabel} from "@/commons/sake";
+import Image from "next/image";
+import SakeImage from "@/components/sake/SakeImage";
 
 interface SakeCardProps{
     sake:SakeListItem;
@@ -10,10 +12,9 @@ export default function SakeCard({sake}:SakeCardProps){
     return (
         <Link href={`/sake/${sake.no}`} className={"group block h-full rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
             <article className={"flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white transition-colors group-hover:border-stone-400"}>
-                <div className={"aspect-4/5 bg-stone-100 p-4"}>
-                    <img src={sake.imageUrl || "/images/sake-placeholder.png"}
-                         alt={sake.nameKo || sake.nameJa}
-                         className={"h-full w-full object-contain"}/>
+                <div className={"relative aspect-4/5 bg-stone-100 p-4"}>
+                    <SakeImage src={sake.imageUrl}
+                               alt={sake.nameKo || sake.nameJa}/>
                 </div>
 
                 <div className={"flex min-w-0 flex-1 flex-col p-4"}>
