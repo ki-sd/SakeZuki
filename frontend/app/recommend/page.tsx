@@ -8,8 +8,8 @@ import {recommendFood,recommendSake} from "@/app/api/recommend";
 import {getSakeDetail,searchSake} from "@/app/api/sake";
 import type {SakeSearchItem} from "@/types/sake";
 import Header from "@/components/layout/Header";
-import Image from "next/image";
 import SakeImage from "@/components/sake/SakeImage";
+import {getSakeTypeLabel} from "@/commons/sake";
 
 type RecommendMode="sake" | "food";
 
@@ -47,6 +47,15 @@ function RecommendContent(){
 	} : null;
 
 	const currentSake=selectedSake || initialSake;
+
+	const selectedSakeDetailQuery=useQuery({
+		queryKey:["sakeDetail",currentSake?.no],
+		queryFn:()=>getSakeDetail(currentSake!.no),
+		enabled:!!currentSake,
+		staleTime:60000
+	});
+
+	const selectedSakeDetail=selectedSakeDetailQuery.data;
 
 	const sakeMutation=useMutation({
 		mutationFn:recommendSake
@@ -352,28 +361,63 @@ function RecommendContent(){
 									</div>
 
 									{currentSake && (
-										<div className={"mt-4 flex min-w-0 items-center gap-3 border-t border-stone-200 pt-4"}>
-											<div className={"flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-stone-100"}>
-												<img src={currentSake.imageUrl || "/images/sake-placeholder.png"}
-													 alt={currentSake.nameKo || currentSake.nameJa}
-													 className={"h-full w-full object-contain"}/>
-											</div>
+										<div className={"group relative mt-4 border-t border-stone-200 pt-4"}>
+											<Link href={`/sake/${currentSake.no}`}
+											      className={"flex min-w-0 items-center gap-3 rounded-md p-1 transition hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-stone-700"}>
+												<div className={"relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-stone-100"}>
+													<SakeImage src={currentSake.imageUrl} alt={currentSake.nameKo || currentSake.nameJa}/>
+												</div>
 
-											<div className={"min-w-0"}>
-												<p className={"text-sm font-medium text-gray-500"}>
-													선택한 사케
-												</p>
-
-												<p className={"break-words text-sm font-semibold text-stone-900 [overflow-wrap:anywhere]"}>
-													{currentSake.nameKo || currentSake.nameJa}
-												</p>
-
-												{currentSake.nameKo && (
-												<p className={"mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]"}>
-														{currentSake.nameJa}
+												<div className={"min-w-0"}>
+													<p className={"text-sm font-medium text-gray-500"}>
+														선택한 사케
 													</p>
-												)}
-											</div>
+
+													<p className={"break-words text-sm font-semibold text-stone-900 [overflow-wrap:anywhere]"}>
+														{currentSake.nameKo || currentSake.nameJa}
+													</p>
+
+													{currentSake.nameKo && (
+														<p className={"mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]"}>
+															{currentSake.nameJa}
+														</p>
+													)}
+												</div>
+											</Link>
+
+											{selectedSakeDetail && (
+												<div className={"pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-72 rounded-lg border border-stone-200 bg-white p-4 shadow-lg group-hover:block group-focus-within:block"}>
+													<p className={"mb-3 text-sm font-semibold text-stone-900"}>
+														간단 정보
+													</p>
+
+													<div className={"grid grid-cols-2 gap-x-4 gap-y-2 text-sm"}>
+														<span className={"text-stone-500"}>종류</span>
+														<span className={"text-stone-800"}>
+															{selectedSakeDetail.sakeType ? getSakeTypeLabel(selectedSakeDetail.sakeType) : "-"}
+                    									</span>
+
+														<span className={"text-stone-500"}>니혼슈도</span>
+														<span className={"text-stone-800"}>
+															{selectedSakeDetail.sakeMeterValue || "-"}
+														</span>
+
+														<span className={"text-stone-500"}>정미보합</span>
+														<span className={"text-stone-800"}>
+															{selectedSakeDetail.polishingRatio || "-"}
+														</span>
+
+														<span className={"text-stone-500"}>알코올</span>
+														<span className={"text-stone-800"}>
+															{selectedSakeDetail.alcoholPercentage || "-"}
+														</span>
+													</div>
+
+													<p className={"mt-3 border-t border-stone-100 pt-3 text-xs text-stone-400"}>
+														클릭하면 상세 정보를 볼 수 있습니다.
+													</p>
+												</div>
+											)}
 										</div>
 									)}
 
