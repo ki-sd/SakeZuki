@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 @RestControllerAdvice
 public class ControllerException {
+    // 입력 오류와 예기치 않은 서버 오류를 구분해 프론트가 실패 상태를 표시할 수 있게 한다.
+    // 내부 예외 상세는 로그에 남기고 일반 오류 응답에는 노출하지 않는다.
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> illegalArgumentException(IllegalArgumentException e){
         log.warn("잘못된 요청: {}",e.getMessage());

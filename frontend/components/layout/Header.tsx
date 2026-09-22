@@ -4,6 +4,8 @@ import Link from "next/link";
 import {usePathname} from "next/navigation";
 
 export default function Header (){
+    // usePathname은 현재 브라우저 경로를 읽어 메뉴의 활성 상태를 바꾼다.
+    // 이 값과 링크의 강조가 이동 직후 다시 렌더링되어야 하므로 Client Component다.
     const pathname=usePathname();
     return (
         <header className={"border-b border-stone-200 bg-white"}>

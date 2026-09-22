@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// 브랜드명은 50건씩 구조화 JSON으로 요청하고 배치 응답 전체를 검증한 뒤 DB에 반영한다.
 public class BrandTranslator {
 
     private static final int BATCH_SIZE=50;

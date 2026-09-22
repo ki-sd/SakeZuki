@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.sakezuki.backend.recommend.mapper.RecommendMapper">
 
+    <!-- sake_no로 저장된 추천이 있으면 외부 AI 호출 없이 바로 반환하는 영속 캐시 조회다. -->
     <select id="getFoodRecommendList" parameterType="long" resultType="com.sakezuki.backend.recommend.dto.RecommendedFoodResponse">
         SELECT name,
             reason
@@ -18,6 +19,8 @@
             </foreach>
     </insert>
 
+    <!-- AI가 만든 검색 조건을 점수로 바꾸되 후보는 SAKE와 추천 프로필에 실제 존재하는 제품으로 한정한다. -->
+    <!-- 상위 40건만 재선정 프롬프트에 보내 입력 크기와 후보 범위를 제한한다. -->
     <select id="getSakeRecommendCandidates" parameterType="com.sakezuki.backend.recommend.dto.SakeRecommendCondition"
             resultType="com.sakezuki.backend.recommend.dto.SakeRecommendCandidate">
 
@@ -141,6 +144,7 @@
         LIMIT 40
     </select>
 
+    <!-- 캐시에는 sake_no와 이유만 보관하고, 화면에 보이는 이름·이미지·수치는 SAKE를 다시 조인한다. -->
     <select id="getSakeRecommendList" parameterType="string"
             resultType="com.sakezuki.backend.recommend.dto.RecommendedSakeResponse">
         SELECT

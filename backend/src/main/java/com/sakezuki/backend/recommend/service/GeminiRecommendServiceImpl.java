@@ -15,6 +15,7 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
 
     @Override
     public List<RecommendedFoodResponse> recommendFood(SakeDetailResponse sake) {
+        // 실제 SAKE 상세값을 프롬프트에 넣고, 없는 필드는 정보없음으로 표시해 추측을 줄인다.
         String prompt="""
         당신은 일본 사케와 음식 페어링 전문가입니다.
         아래 사케의 정보를 종합하여 이 사케와 잘 어울리는 음식 3개를 추천하세요.
@@ -69,6 +70,7 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
                         ? sake.getBrewery().getPrefecture():"정보없음"
         );
 
+        // 구조화 출력으로 DTO 형태를 요청하더라도 필드가 비거나 개수가 틀릴 수 있어 뒤에서 다시 검증한다.
         AiFoodRecommendResponse response=builder.build()
                 .prompt()
                 .user(prompt)
@@ -80,6 +82,7 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
                                 .validateSchema()
                 );
 
+        // DB에 저장하기 전에 개수와 사용자에게 보여줄 필수 문구를 확인한다.
         // 검증
         validateResponse(response);
 
@@ -105,6 +108,7 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
 
     @Override
     public SakeRecommendCondition analyzeFood(String food){
+        // 첫 AI 호출은 제품을 고르는 단계가 아니라 DB 후보를 찾을 느슨한 조건을 만드는 단계다.
         String prompt="""
             당신은 일본주와 음식 페어링을 분석하는 전문가입니다.
 
@@ -162,6 +166,8 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
             SakeRecommendCondition condition,
             List<SakeRecommendCandidate> candidates
     ){
+        // 두 번째 AI 호출에는 조회된 후보의 no와 실제 속성만 제공한다.
+        // 결과 식별자가 후보 밖으로 나가면 저장하지 않도록 아래에서 교차 검증한다.
         if(candidates==null || candidates.isEmpty()){
             throw new IllegalArgumentException("추천할 사케 후보가 없습니다.");
         }
@@ -264,6 +270,7 @@ public class GeminiRecommendServiceImpl implements GeminiRecommendService {
                 .map(SakeRerankItem::getSakeNo)
                 .toList();
 
+        // JSON 형식이 맞아도 중복 번호나 후보 밖 번호는 존재하지 않는 추천과 같은 문제를 만든다.
         if(resultNos.stream().distinct().count()!=3){
             throw new IllegalStateException("중복된 사케가 추천되었습니다.");
         }

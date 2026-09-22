@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
+// 문자열로 수집한 수치 범위를 별도 프로필 테이블에 저장해 추천 후보 SQL이 비교할 수 있게 한다.
 public class SakeRecommendProfileGenerator {
 
     private static final int BATCH_SIZE=500;
@@ -34,6 +35,7 @@ public class SakeRecommendProfileGenerator {
         }
     }
 
+    // 많은 SAKE를 한 건씩 전송하지 않고 JDBC 배치로 묶는다. 전체 실패 시 상위 트랜잭션이 롤백한다.
     private static void generate(Connection conn) throws Exception{
         String selectSql="""
                 SELECT no,sake_meter_value,acidity,polishing_ratio

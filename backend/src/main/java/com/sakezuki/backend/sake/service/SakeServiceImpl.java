@@ -14,6 +14,7 @@ public class SakeServiceImpl implements SakeService {
     private final SakeMapper sMapper;
     private final int ROW=12;
 
+    // 목록과 COUNT 쿼리에 같은 조건을 전달해 카드 수와 페이지 수가 서로 어긋나지 않게 한다.
     private Map<String,Object> createSearchMap(String fd,String sakeType){
         Map<String,Object> map=new HashMap<>();
         if(fd!=null && !fd.isEmpty()){
@@ -25,6 +26,7 @@ public class SakeServiceImpl implements SakeService {
         return map;
     }
 
+    // UI가 보낸 1부터 시작하는 페이지를 SQL OFFSET으로 바꾼다. 한 페이지는 12건이다.
     @Override
     public List<SakeListResponse> getSakeList(int page, String fd, String sakeType) {
         if(page<1) throw new IllegalArgumentException("페이지는 1 이상이어야 합니다.");
@@ -35,6 +37,7 @@ public class SakeServiceImpl implements SakeService {
         return sMapper.getSakeList(map);
     }
 
+    // COUNT를 별도로 조회해 전체 페이지와 한 번에 보여줄 페이지 버튼 범위를 계산한다.
     @Override
     public Map<String, Object> sakeListPage(int page,String fd, String sakeType) {
         if(page<1) throw new IllegalArgumentException("페이지는 1 이상이어야 합니다.");

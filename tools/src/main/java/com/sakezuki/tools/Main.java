@@ -28,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+// 수집 흐름의 진입점이다. 목록의 제품 URL을 따라가며 제품·브랜드·양조장을 묶어 저장한다.
 public class Main {
 
     /*
@@ -631,6 +632,7 @@ public class Main {
      * ========================================
      */
 
+    // 관련 세 엔티티를 한 트랜잭션으로 저장해 중간 실패 시 연결이 끊긴 행이 남지 않게 한다.
     private static void saveToDatabase(
             SakeData sake,
             BreweryData brewery,

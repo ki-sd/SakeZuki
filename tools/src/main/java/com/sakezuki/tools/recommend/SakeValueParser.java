@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// 수집한 수치가 단일값·범위·미만 등 문자열로 섞여 있어 추천 SQL에 쓰기 전에 범위로 정규화한다.
 public class SakeValueParser {
 
     private static final Pattern NUMBER_PATTERN=Pattern.compile("-?\\d+(?:\\.\\d+)?");

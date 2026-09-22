@@ -16,13 +16,16 @@ public class RecommendServiceImpl implements RecommendService {
     private final SakeService sService;
     private final GeminiRecommendService gService;
 
+    // 같은 sakeNo의 추천을 먼저 DB에서 찾는다. 이미 생성된 결과가 있으면 Gemini 호출을 건너뛴다.
     @Override
     public FoodRecommendResponse foodRecommendList(Long sakeNo) {
         List<RecommendedFoodResponse> recommends=rMapper.getFoodRecommendList(sakeNo);
         if(recommends.isEmpty()){
             SakeDetailResponse sake=sService.getSakeDetail(sakeNo);
+            // DB의 실제 상세 정보를 AI에 전달해 제품 고유 사실을 임의로 만들지 않도록 한다.
             // AI 호출
             recommends=gService.recommendFood(sake);
+            // 첫 요청의 결과를 저장해 다음 요청은 같은 음식 추천을 재사용한다.
             // DB 저장
             rMapper.insertFoodRecommend(sakeNo,recommends);
         }
@@ -32,6 +35,7 @@ public class RecommendServiceImpl implements RecommendService {
                 .build();
     }
 
+    // 음식명은 공백만 정리해 캐시 키로 쓰며, 최초 요청에서만 분석→DB 후보→재선정을 수행한다.
     @Override
     public SakeRecommendResponse sakeRecommendList(String food){
         if(food==null || food.isBlank()){
@@ -45,6 +49,7 @@ public class RecommendServiceImpl implements RecommendService {
 
         if(recommendations.isEmpty()){
 
+            // Gemini는 후보 검색 조건을 만들고, 실제 후보 제품은 MyBatis가 DB에서 가져온다.
             SakeRecommendCondition condition=gService.analyzeFood(normalizedFood);
 
             List<SakeRecommendCandidate> candidates=
@@ -54,6 +59,7 @@ public class RecommendServiceImpl implements RecommendService {
                 throw new IllegalStateException("추천 가능한 사케 후보가 없습니다.");
             }
 
+            // 후보 안에서 고른 식별자와 추천 이유만 저장한다. 응답의 제품 정보는 다시 DB에서 읽는다.
             List<SakeRerankItem> rerankItems=
                     gService.rerankSake(
                             normalizedFood,

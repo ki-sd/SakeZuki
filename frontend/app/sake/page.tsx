@@ -1,5 +1,6 @@
 "use client";
 
+// 검색 입력·필터·페이지 버튼에 브라우저 이벤트와 useState가 필요해 이 경로를 Client Component로 둔다.
 import {useQuery} from "@tanstack/react-query";
 import {getSakeList} from "@/app/api/sake";
 import SakeCard from "@/components/sake/SakeCard";
@@ -8,6 +9,8 @@ import Header from "@/components/layout/Header";
 import {SAKE_TYPES} from "@/commons/sake";
 
 export default function SakePage(){
+    // 입력 중인 값은 클라이언트 상태로 보관하고, 제출된 값만 서버 조회 조건으로 사용한다.
+    // 이렇게 분리하면 키를 누를 때마다 목록 API를 호출하지 않는다.
     // 검색창에 입력되어있는 값
     const [keyword,setKeyword]=useState("");
     // 실제 API 검색 입력값
@@ -16,6 +19,8 @@ export default function SakePage(){
     const [page,setPage]=useState(1);
     // 선택 종류
     const [sakeType,setSakeType]=useState("");
+    // queryKey의 페이지·검색어·종류 조합이 캐시를 구분한다. 값이 바뀌면 새 조건의 queryFn이 실행된다.
+    // placeholderData는 페이지 이동 중 직전 결과를 잠시 유지하고, isFetching으로 재조회 중임을 표시한다.
     // 사케 목록 조회
     const {data,isLoading,isError,isFetching}=useQuery({
         queryKey:["sakeList",page,searchKeyword,sakeType],
@@ -23,12 +28,14 @@ export default function SakePage(){
         placeholderData:(previousData)=>previousData,
         retry:false
     });
+    // form의 기본 새로고침을 막고, 검색 조건 확정과 페이지 초기화를 한 번의 사용자 동작으로 묶는다.
     // 검색버튼 이벤트 처리
     const handleSearch=(e:SubmitEvent<HTMLFormElement>)=>{
         e.preventDefault();
         setPage(1);
         setSearchKeyword(keyword.trim());
     };
+    // 필터가 바뀌면 기존 페이지 번호에는 결과가 없을 수 있어 첫 페이지부터 다시 본다.
     // 종류 변경시 첫 페이지부터 조회
     const handleTypeChange=(type:string)=>{
         setPage(1);
@@ -67,6 +74,7 @@ export default function SakePage(){
 
                         {/* 사케 종류 필터 */}
                         <div className={"mt-5 flex flex-wrap gap-1.5"} aria-label={"사케 종류 필터"}>
+                            {/* 고정된 종류 값은 key로 쓰고, 선택값이 바뀌면 React가 버튼 강조를 다시 그린다. */}
                             {SAKE_TYPES.filter((type)=>type.value!=="非公開").map((type)=>(
                                 <button key={type.value} type="button" onClick={()=>handleTypeChange(type.value)} aria-pressed={sakeType===type.value}
                                         className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700 ${
@@ -95,6 +103,7 @@ export default function SakePage(){
                         )}
                     </div>
 
+                    {/* 최초 로딩과 재조회는 다르다. 직전 데이터가 없을 때만 스켈레톤을 보여준다. */}
                     {isLoading && (
                         <div className={"grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"} aria-label={"사케 목록 불러오는 중"}>
                             {Array.from({length:8},(_,index)=>(
@@ -122,6 +131,7 @@ export default function SakePage(){
                         <>
                             {/* 조회된 사케 출력 */}
                             <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 ${isFetching ? "opacity-60" : ""}`} aria-busy={isFetching}>
+                                {/* DB 식별자 no를 key로 사용해 목록 재조회 시 같은 제품의 위치를 추적한다. */}
                                 {data.list.map((sake)=>(
                                     <SakeCard key={sake.no} sake={sake}/>
                                 ))}

@@ -10,6 +10,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+// 아직 *_ko가 비어 있는 원문만 꺼내고 갱신 시에도 IS NULL 조건을 둔다.
+// 중간에 멈춘 번역을 재실행해도 이미 저장된 한국어 값을 덮어쓰지 않기 위한 경계다.
 public class TranslationRepository {
     private final Connection conn;
 

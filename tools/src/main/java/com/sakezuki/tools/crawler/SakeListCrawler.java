@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// 목록에서 상세 페이지 식별자를 모으는 단계다. LinkedHashSet으로 중복 URL의 재수집을 줄이면서 순서를 유지한다.
 public class SakeListCrawler {
 
     private static final String LIST_URL =

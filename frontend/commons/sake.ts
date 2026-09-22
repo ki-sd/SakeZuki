@@ -1,3 +1,4 @@
+// 필터 값은 DB의 일본어 원문과 일치시켜 보내고, label만 한국어 화면 표시에 사용한다.
 // 사케 종류
 export const SAKE_TYPES=[
     {label:"전체",value:""},
@@ -23,6 +24,7 @@ export const SAKE_TYPES=[
     {label:"비공개",value:"非公開"}
 ];
 
+// 대응표에 없는 새 종류는 원문을 보여 데이터가 화면에서 사라지지 않게 한다.
 // 사케 종류의 화면 표시명 반환
 export const getSakeTypeLabel=(sakeType:string | null)=>{
     if(!sakeType) return "종류 정보 없음";
@@ -30,6 +32,7 @@ export const getSakeTypeLabel=(sakeType:string | null)=>{
     return SAKE_TYPES.find((type)=>type.value===sakeType)?.label || sakeType;
 };
 
+// 지역도 DB 원문을 보존하면서 화면에서만 한국어로 바꾸는 표시용 대응표다.
 // 도도부현
 export const PREFECTURES=[
     {label:"홋카이도",value:"北海道"},
@@ -81,6 +84,7 @@ export const PREFECTURES=[
     {label:"오키나와현",value:"沖縄県"}
 ];
 
+// 미매핑 지역은 원문을 fallback으로 사용해 새 수집값도 확인할 수 있게 한다.
 // 도도부현의 화면 표시명 반환
 export const getPrefectureLabel=(prefecture:string | null)=>{
     if(!prefecture) return "지역 정보 없음";

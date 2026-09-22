@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// 수집값을 정제한 뒤 이름은 제품 단위, 원료미·효모는 중복 원문 단위로 번역한다.
+// 결과는 별도 *_ko 열에 저장하므로 화면 표기와 원문을 각각 확인할 수 있다.
 public class SakeTranslator {
     private static final int NAME_BATCH_SIZE=50;
     private static final int TERM_BATCH_SIZE=50;
@@ -44,6 +46,7 @@ public class SakeTranslator {
         System.out.println("================================");
     }
 
+    // 웹에서 남은 HTML 표현을 번역 프롬프트에 넣기 전에 처리한다.
     private void cleanSourceData() throws Exception{
         System.out.println();
         System.out.println("SAKE 원본 데이터 정제 시작");
@@ -89,6 +92,7 @@ public class SakeTranslator {
         return count;
     }
 
+    // 한 번에 50건씩 보내고 응답 검증을 통과한 값만 저장한다. 남은 미번역 건을 다시 조회하므로 재시작할 수 있다.
     private void translateNames() throws Exception{
         int total=repository.countUntranslatedSakeNames();
         int complete=0;
@@ -140,6 +144,7 @@ public class SakeTranslator {
         System.out.println("SAKE 이름 번역 완료");
     }
 
+    // 같은 쌀 표기가 여러 SAKE에 반복되므로 DISTINCT 원문만 요청하고 저장 시 같은 행들에 재사용한다.
     private void translateRice() throws Exception{
         int total=repository.countUntranslatedRice();
         int complete=0;
@@ -185,6 +190,7 @@ public class SakeTranslator {
         System.out.println("SAKE 쌀 번역 완료");
     }
 
+    // 효모도 중복 값을 묶어 번역해 호출량과 행별 표기 차이를 줄인다.
     private void translateYeast() throws Exception{
         int total=repository.countUntranslatedYeast();
         int complete=0;
@@ -255,6 +261,7 @@ public class SakeTranslator {
         return map;
     }
 
+    // JSON 파싱 성공만으로 충분하지 않아 요청 no의 누락·중복·빈 번역을 저장 전에 막는다.
     private void validateNameResults(
             List<SakeTranslationData> sakes,
             List<SakeTranslationResult> results

@@ -1,5 +1,6 @@
 "use client";
 
+// 입력·자동완성 선택·추천 요청은 브라우저 이벤트에 따라 달라져 Client Component가 필요하다.
 import {Suspense,useState} from "react";
 import Link from "next/link";
 import {useSearchParams} from "next/navigation";
@@ -11,9 +12,11 @@ import Header from "@/components/layout/Header";
 import SakeImage from "@/components/sake/SakeImage";
 import {getSakeTypeLabel} from "@/commons/sake";
 
+// 화면의 두 추천 방향만 허용해 모드별 입력과 결과 렌더링이 같은 기준을 쓰게 한다.
 type RecommendMode="sake" | "food";
 
 export default function RecommendPage(){
+    // useSearchParams를 쓰는 하위 화면을 Suspense로 감싸 URL 매개변수 해석 중 보여줄 UI를 둔다.
 	return (
 		<Suspense fallback={<><Header/><main className={"page-shell py-10"}><div className={"ui-state"}>추천 화면을 불러오는 중...</div></main></>}>
 			<RecommendContent/>
@@ -22,16 +25,20 @@ export default function RecommendPage(){
 }
 
 function RecommendContent(){
+    // 상세 페이지에서 ?sakeNo=...로 들어오면 이미 고른 제품을 이어받아 음식 추천 모드로 연다.
 	const searchParams=useSearchParams();
 	const sakeNoParam=searchParams.get("sakeNo");
 	const initialSakeNo=sakeNoParam ? Number(sakeNoParam) : null;
 	const hasInitialSake=initialSakeNo!==null && Number.isInteger(initialSakeNo) && initialSakeNo>0;
 
+    // 입력값·선택값·현재 모드는 화면에서만 쓰는 클라이언트 상태다.
+    // API 응답과 요청 상태는 아래 useQuery/useMutation이 별도로 관리한다.
 	const [mode,setMode]=useState<RecommendMode>(hasInitialSake ? "food" : "sake");
 	const [food,setFood]=useState("");
 	const [sakeSearch,setSakeSearch]=useState("");
 	const [selectedSake,setSelectedSake]=useState<SakeSearchItem | null>(null);
 
+    // URL의 no가 유효할 때만 제품을 조회한다. 상세 화면과 같은 키라 기존 상세 캐시를 재사용할 수 있다.
 	const initialSakeQuery=useQuery({
 		queryKey:["sakeDetail",initialSakeNo],
 		queryFn:()=>getSakeDetail(initialSakeNo!),
@@ -39,6 +46,7 @@ function RecommendContent(){
 		retry:false
 	});
 
+    // 상세 응답을 자동완성 선택 결과와 같은 최소 형태로 맞춰 이후 요청 흐름을 공유한다.
 	const initialSake:SakeSearchItem | null=initialSakeQuery.data ? {
 		no:initialSakeQuery.data.no,
 		nameKo:initialSakeQuery.data.nameKo,
@@ -57,6 +65,8 @@ function RecommendContent(){
 
 	const selectedSakeDetail=selectedSakeDetailQuery.data;
 
+    // 추천은 사용자가 버튼을 눌렀을 때 시작하는 POST 작업이라 useMutation으로 대기·실패·성공을 관리한다.
+    // 서버의 DB 영속 캐시와 별개로, 여기서는 현재 요청의 화면 상태를 다룬다.
 	const sakeMutation=useMutation({
 		mutationFn:recommendSake
 	});
@@ -65,6 +75,8 @@ function RecommendContent(){
 		mutationFn:recommendFood
 	});
 
+    // 입력 문자열이 캐시 키가 되고 30초 동안 같은 검색어의 결과를 재사용한다.
+    // 2자 미만·다른 모드·이미 선택한 제품에서는 enabled로 자동완성 요청을 막는다.
 	const searchQuery=useQuery({
 		queryKey:["sakeSearch",sakeSearch],
 		queryFn:()=>searchSake(sakeSearch.trim()),
@@ -72,6 +84,7 @@ function RecommendContent(){
 		staleTime:30000
 	});
 
+    // 입력을 정리한 뒤 요청하고, 진행 중 재클릭은 막아 같은 POST가 겹치지 않게 한다.
 	const handleSakeRecommend=()=>{
 		const value=food.trim();
 
@@ -84,6 +97,7 @@ function RecommendContent(){
 		});
 	};
 
+    // 표시된 문자열이 아니라 DB에서 선택한 sakeNo를 보내 제품 식별을 확정한다.
 	const handleFoodRecommend=()=>{
 		if(!currentSake || foodMutation.isPending){
 			return;
@@ -94,12 +108,14 @@ function RecommendContent(){
 		});
 	};
 
+    // 새 제품을 고르면 이전 추천 결과를 지워 다른 제품의 결과가 남지 않게 한다.
 	const handleSakeSelect=(sake:SakeSearchItem)=>{
 		setSelectedSake(sake);
 		setSakeSearch(sake.nameKo || sake.nameJa);
 		foodMutation.reset();
 	};
 
+    // 선택 후 글자를 고치면 이전 no는 더 이상 입력과 맞지 않으므로 선택을 해제한다.
 	const handleSakeSearchChange=(value:string)=>{
 		setSakeSearch(value);
 		setSelectedSake(null);
@@ -172,6 +188,7 @@ function RecommendContent(){
 							</div>
 						</section>
 
+                        {/* mutation 상태를 그대로 사용해 최초 생성처럼 오래 걸리는 요청도 대기·오류·결과를 구분한다. */}
 						{sakeMutation.isPending && (
 							<section className={"ui-state mt-7"}>
 								<div className={"mx-auto mb-4 h-6 w-6 animate-spin rounded-full border-2 border-stone-200 border-t-stone-700"}/>
@@ -328,6 +345,7 @@ function RecommendContent(){
 														</p>
 													)}
 
+                                                    {/* 검색 결과의 no를 key와 선택 식별자로 함께 사용한다. */}
 													{!searchQuery.isFetching && searchQuery.data?.map((sake)=>(
 														<button key={sake.no} type={"button"} onClick={()=>handleSakeSelect(sake)}
 																className={"flex w-full items-center gap-3 border-b border-stone-100 px-3 py-2.5 text-left transition last:border-b-0 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-stone-700"}>

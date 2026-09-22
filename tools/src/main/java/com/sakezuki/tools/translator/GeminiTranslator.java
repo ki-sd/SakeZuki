@@ -10,6 +10,7 @@ import com.sakezuki.tools.util.EnvLoader;
 import java.util.List;
 import java.util.Map;
 
+// 번역 요청의 JSON 스키마와 재시도를 한곳에 모아 브랜드·사케·용어 번역이 같은 응답 규칙을 쓴다.
 public class GeminiTranslator {
     private static final String MODEL="gemini-3.5-flash";
     private static final int MAX_RETRY=3;
@@ -72,6 +73,8 @@ public class GeminiTranslator {
                 .build();
     }
 
+    // JSON MIME과 스키마는 응답 형태를 유도하고, 실제 값의 타당성은 호출자가 별도로 검증한다.
+    // 일시적 API 실패에는 제한된 횟수로 간격을 늘려 재시도한다.
     private String generate(String prompt,Schema schema){
         GenerateContentConfig config=GenerateContentConfig.builder()
                 .responseMimeType("application/json")

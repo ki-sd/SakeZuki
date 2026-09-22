@@ -1,5 +1,6 @@
 "use client";
 
+// 동적 경로의 no를 훅으로 읽고 탭을 클릭해 바꾸므로 브라우저에서 상태를 관리한다.
 import {useState} from "react";
 import {useParams} from "next/navigation";
 import {useQuery} from "@tanstack/react-query";
@@ -9,9 +10,11 @@ import Link from "next/link";
 import {getSakeTypeLabel,getPrefectureLabel} from "@/commons/sake";
 import BreweryMap from "@/components/brewery/BreweryMap";
 
+// 허용하는 탭을 세 값으로 제한해 잘못된 문자열이 상태나 비교식에 들어오지 않게 한다.
 type DetailTab="sake" | "brand" | "brewery";
 
 export default function SakeDetailPage(){
+    // App Router의 [no] 구간은 문자열이므로 API 식별자로 보내기 전에 숫자로 바꾼다.
     // [no]값 갖고옴
     const params=useParams<{no:string}>();
     const no=Number(params.no);
@@ -19,6 +22,8 @@ export default function SakeDetailPage(){
     // 현재 선택된 탭
     const [activeTab,setActiveTab]=useState<DetailTab>("sake");
 
+    // 목록 카드·추천 화면과 같은 sakeDetail 키를 써 동일한 제품 상세 응답을 캐시에서 재사용한다.
+    // 잘못된 경로 값이면 enabled가 요청을 막아 유효하지 않은 번호를 서버에 보내지 않는다.
     // 상세 조회
     const {data,isLoading,isError}=useQuery({
         queryKey:["sakeDetail",no],
@@ -27,6 +32,7 @@ export default function SakeDetailPage(){
         retry:false
     });
 
+    // 서버 상태에 따라 초기 대기·실패·성공 화면을 분리한다. 성공 전에는 상세 필드를 읽지 않는다.
     if(isLoading){
         return (
             <>
@@ -123,6 +129,7 @@ export default function SakeDetailPage(){
 
                 </section>
 
+                {/* 탭은 클라이언트 상태만 바꾸므로 사케·브랜드·양조장을 전환해도 상세 API를 다시 호출하지 않는다. */}
                 {/* 상세정보 탭 */}
                 <section className={"mt-10 sm:mt-12"}>
                     <div className={"flex border-b border-stone-200"}>
@@ -273,12 +280,14 @@ export default function SakeDetailPage(){
         </>
     );
 }
+// 상세 필드마다 null 가능성이 달라 공통 컴포넌트가 빈 값과 원문 병기를 일관되게 처리한다.
 interface InfoItemProps{
     label:string;
     value:string | null | undefined;
     subValue?:string | null;
 }
 
+// 번역값이 있을 때만 원문을 보조 줄에 표시하고, 정보가 없으면 같은 문구로 안내한다.
 // 공통 사용
 function InfoItem({label,value,subValue}:InfoItemProps){
     return (

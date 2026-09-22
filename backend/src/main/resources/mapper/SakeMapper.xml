@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.sakezuki.backend.sake.mapper.SakeMapper">
 
+    <!-- 한 행에 조인된 브랜드·양조장 컬럼을 중첩 DTO로 나눠 프론트 상세 탭에 전달한다. -->
     <resultMap id="sakeDetailMap" type="com.sakezuki.backend.sake.dto.SakeDetailResponse">
         <!-- 사케 정보 -->
         <id property="no" column="no"/>
@@ -47,6 +48,7 @@
         </association>
     </resultMap>
 
+    <!-- 검색어와 종류는 전달된 경우에만 적용하고, 이미지가 있는 제품을 먼저 보여준다. -->
     <select id="getSakeList" parameterType="hashmap" resultType="com.sakezuki.backend.sake.dto.SakeListResponse">
         SELECT s.no,
             s.name_ja,
@@ -74,6 +76,7 @@
         LIMIT 12 OFFSET #{start}
     </select>
 
+    <!-- 목록과 동일한 필터로 전체 건수를 세어 페이지네이션 메타데이터를 만든다. -->
     <select id="sakeListCount" parameterType="hashmap" resultType="int">
         SELECT COUNT(*)
         FROM SAKE s
@@ -89,6 +92,7 @@
         </where>
     </select>
 
+    <!-- 상세는 원문과 한국어 표시값을 모두 조회해 번역 누락 시 원문 fallback이 가능하게 한다. -->
     <select id="getSakeDetail" parameterType="long" resultMap="sakeDetailMap">
         SELECT s.no,
             s.name_ja AS nameJa,

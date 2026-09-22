@@ -4,6 +4,7 @@ pipeline {
     }
 
     options {
+        // 같은 서버의 Compose 서비스를 두 배포가 동시에 바꾸지 않도록 직렬화한다.
         disableConcurrentBuilds()
     }
 
@@ -14,6 +15,7 @@ pipeline {
 
     stages {
         stage('Prepare') {
+            // 비밀값은 저장소에 두지 않고 서버의 환경변수 파일에서 작업 공간으로 가져온다.
             steps {
                 sh '''
                     set -e
@@ -54,6 +56,7 @@ pipeline {
         }
 
         stage('Verify') {
+            // 컨테이너가 시작된 직후의 준비 시간을 고려해 HTTP 응답을 여러 번 확인한다.
             steps {
                 sh '''
                     set -e
@@ -91,6 +94,7 @@ pipeline {
         }
 
         always {
+            // 배포 결과와 관계없이 작업 공간의 환경변수 복사본을 제거한다.
             sh 'rm -f .env'
         }
     }

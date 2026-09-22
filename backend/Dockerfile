@@ -1,3 +1,4 @@
+# JDK가 필요한 Gradle 빌드와 JRE만 필요한 실행 단계를 분리한다.
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app

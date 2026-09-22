@@ -6,12 +6,15 @@ spring:
     import: optional:file:../.env[.properties]
 
   datasource:
+    # Compose에서는 MYSQL_HOST=mysql, 로컬 실행에서는 기본 localhost를 사용한다.
+    # 계정과 비밀번호는 저장소가 아니라 실행 환경의 값에서 받는다.
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
 
   ai:
+    # 추천 Service의 ChatClient가 이 모델 설정과 API 키를 사용한다.
     model:
       chat: google-genai
 
@@ -24,6 +27,7 @@ spring:
           temperature: 0.4
 
 mybatis:
+  # Mapper 인터페이스와 XML SQL을 연결하고 DB의 snake_case 열을 Java 필드명으로 매핑한다.
   mapper-locations: classpath:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true

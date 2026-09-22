@@ -4,12 +4,14 @@ interface BreweryMapProps{
 }
 
 export default function BreweryMap({name,address}:BreweryMapProps){
+    // NEXT_PUBLIC_ 키는 브라우저에 노출되는 지도 임베드용 값이다. 없으면 빈 지도 대신 영역을 숨긴다.
     const apiKey=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
     if(!apiKey || !address){
         return null;
     }
 
+    // 양조장명과 원문 주소를 하나의 검색어로 묶고 URL 인코딩해 공백·일본어도 안전하게 전달한다.
     const query=encodeURIComponent(`${name} ${address}`);
     const mapUrl=`https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${query}`;
     const googleMapsUrl=`https://www.google.com/maps/search/?api=1&query=${query}`;

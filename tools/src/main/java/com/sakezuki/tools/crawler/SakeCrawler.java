@@ -8,6 +8,8 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 
+// 사이트의 표 머리글을 필드명으로 해석해 한 제품의 원문 데이터를 만든다.
+// 화면 표시용 한국어 값은 여기서 추측하지 않고 별도 번역 단계에 맡긴다.
 public class SakeCrawler {
     private static final String BASE_URL =
             "https://sake-guide.com/sake/detail/";
