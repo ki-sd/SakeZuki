@@ -10,22 +10,22 @@ SakeZuki는 사케의 기본 정보와 브랜드·양조장 정보를 탐색하�
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
-| 항목 | 내용 |
-| --- | --- |
-| 개발 기간 | 2026.09 |
-| 개발 인원 | 1명 |
-| 역할 | 기획 · 설계 · Backend · Frontend · 데이터 구축 · 배포 |
-| Backend | Java 21 · Spring Boot 4.1.1 · Spring AI 2.0.1 · MyBatis |
+| 항목 | 내용                                                               |
+| --- |------------------------------------------------------------------|
+| 개발 기간 | 2026.09                                                          |
+| 개발 인원 | 1명                                                               |
+| 역할 | 기획 · 설계 · Backend · Frontend · 데이터 구축 · 배포                       |
+| Backend | Java 21 · Spring Boot 4.1.1 · Spring AI 2.0.1 · MyBatis · Flyway |
 | Frontend | Next.js 16.3.5 · React 19 · TypeScript · TanStack Query · Axios · Tailwind CSS |
-| Database | MySQL 8.4 |
-| AI | Google Gemini |
-| Infrastructure | Docker Compose · Nginx · AWS EC2 |
+| Database | MySQL 8.4                                                        |
+| AI | Google Gemini                                                    |
+| Infrastructure | Docker Compose · Nginx · AWS EC2                                 |
 
 ---
 
-## 🎯 주요 기능
+## 주요 기능
 
 ### 1. 사케 탐색
 
@@ -93,7 +93,7 @@ Gemini 음식 페어링 요청
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 ### Backend
 
@@ -133,7 +133,7 @@ Gemini 음식 페어링 요청
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```text
                          ┌──────────────────────┐
@@ -161,7 +161,7 @@ Gemini 음식 페어링 요청
 
 ---
 
-## 🗃 Database
+## Database
 
 주요 데이터는 다음과 같이 구성했습니다.
 
@@ -192,7 +192,7 @@ BREWERY
 
 ---
 
-## 💡 Technical Points
+## Technical Points
 
 ### 1. React · TanStack Query 기반 서버 상태 관리
 
@@ -271,7 +271,7 @@ AI 추천 과정에서 안정적으로 조건 검색을 수행할 수 있도록 
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 SakeZuki/
@@ -299,7 +299,7 @@ SakeZuki/
 
 ---
 
-## ⚙️ Local Setup
+## Local Setup
 
 ### Requirements
 
@@ -384,7 +384,7 @@ http://localhost:3000
 
 ---
 
-## 🔌 Main API
+## Main API
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
@@ -396,7 +396,7 @@ http://localhost:3000
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 AWS EC2 Ubuntu 환경에 서비스를 배포하고 Nginx를 Reverse Proxy로 사용했습니다.
 
@@ -417,7 +417,7 @@ Spring Boot와 Next.js는 Nginx 뒤에서 서비스하도록 구성했습니다.
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### AI가 실제로 존재하지 않는 사케를 추천하는 문제
 
@@ -457,7 +457,7 @@ Gemini 호출과 후보 재랭킹 과정으로 인해 최초 추천 요청에 30
 
 ---
 
-## 📈 What I Learned
+## What I Learned
 
 이 프로젝트를 통해 Vue 중심의 기존 프로젝트 경험에서 벗어나  
 **Next.js · React · TypeScript · TanStack Query**를 활용한 프론트엔드 개발을 경험했습니다.
@@ -471,7 +471,7 @@ AI 기능에서도 데이터의 신뢰성과 결과 검증이 중요하다는 �
 
 ---
 
-## 👤 Developer
+## Developer
 
 **기승도 (ki-sd)**
 
