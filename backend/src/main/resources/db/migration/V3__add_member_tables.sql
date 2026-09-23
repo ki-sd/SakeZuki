@@ -1,4 +1,4 @@
-CREATE TABLE `member`(
+CREATE TABLE `MEMBER`(
     `no` BIGINT AUTO_INCREMENT,
     `email` VARCHAR(255) NOT NULL,
     `password` VARCHAR(255),
@@ -17,7 +17,7 @@ CREATE TABLE `member`(
  DEFAULT CHARSET=utf8mb4
  COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `social_account`(
+CREATE TABLE `SOCIAL_ACCOUNT`(
     `no` BIGINT AUTO_INCREMENT,
     `mno` BIGINT NOT NULL,
     `provider` VARCHAR(100) NOT NULL,
@@ -25,33 +25,33 @@ CREATE TABLE `social_account`(
 
     CONSTRAINT sa_no_pk PRIMARY KEY (`no`),
     CONSTRAINT sa_mno_fk FOREIGN KEY (`mno`)
-        REFERENCES `member`(`no`),
+        REFERENCES `MEMBER`(`no`),
     CONSTRAINT sa_pro_uk UNIQUE (`provider`,`provider_user_id`)
 )ENGINE=InnoDB
  DEFAULT CHARSET=utf8mb4
  COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `member_role`(
+CREATE TABLE `MEMBER_AUTHORITY`(
     `no` BIGINT AUTO_INCREMENT,
     `mno` BIGINT NOT NULL,
-    `role` VARCHAR(20) DEFAULT 'ROLE_USER' NOT NULL,
+    `authority` VARCHAR(20) DEFAULT 'ROLE_USER' NOT NULL,
 
-    CONSTRAINT mr_no_pk PRIMARY KEY (`no`),
-    CONSTRAINT mr_mno_fk FOREIGN KEY (`mno`)
-        REFERENCES `member`(`no`),
-    CONSTRAINT mr_mr_uk UNIQUE (`mno`,`role`)
+    CONSTRAINT ma_no_pk PRIMARY KEY (`no`),
+    CONSTRAINT ma_mno_fk FOREIGN KEY (`mno`)
+        REFERENCES `MEMBER`(`no`),
+    CONSTRAINT ma_ma_uk UNIQUE (`mno`,`authority`)
 )ENGINE=InnoDB
  DEFAULT CHARSET=utf8mb4
  COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `member_grade`(
+CREATE TABLE `MEMBER_GRADE`(
     `no` BIGINT AUTO_INCREMENT,
     `mno` BIGINT NOT NULL,
     `grade` VARCHAR(20) DEFAULT '일반회원' NOT NULL,
 
     CONSTRAINT mg_no_pk PRIMARY KEY (`no`),
     CONSTRAINT mg_mno_fk FOREIGN KEY (`mno`)
-        REFERENCES `member`(`no`),
+        REFERENCES `MEMBER`(`no`),
     CONSTRAINT mg_gr_uk UNIQUE (`mno`)
 )ENGINE=InnoDB
  DEFAULT CHARSET=utf8mb4

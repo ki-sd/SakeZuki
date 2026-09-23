@@ -148,24 +148,24 @@
     <select id="getSakeRecommendList" parameterType="string"
             resultType="com.sakezuki.backend.recommend.dto.RecommendedSakeResponse">
         SELECT
-        s.no,
-        s.name_ko AS nameKo,
-        s.name_ja AS nameJa,
-        s.image_url AS imageUrl,
-        s.sake_type AS sakeType,
-        b.prefecture,
-        s.polishing_ratio AS polishingRatio,
-        s.acidity,
-        s.alcohol_percentage AS alcoholPercentage,
-        b.name_ko AS breweryNameKo,
-        rs.reason
+            s.no,
+            s.name_ko AS nameKo,
+            s.name_ja AS nameJa,
+            s.image_url AS imageUrl,
+            s.sake_type AS sakeType,
+            b.prefecture,
+            s.polishing_ratio AS polishingRatio,
+            s.acidity,
+            s.alcohol_percentage AS alcoholPercentage,
+            b.name_ko AS breweryNameKo,
+            rs.reason
         FROM RECOMMEND_SAKE rs
         JOIN SAKE s
-        ON s.no=rs.sake_no
+            ON s.no=rs.sake_no
         LEFT JOIN BRAND br
-        ON br.no=s.brand_no
+            ON br.no=s.brand_no
         LEFT JOIN BREWERY b
-        ON b.no=br.brewery_no
+            ON b.no=br.brewery_no
         WHERE rs.food=#{food}
         ORDER BY rs.no
     </select>
