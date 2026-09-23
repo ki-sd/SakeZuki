@@ -13,6 +13,9 @@ spring:
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
 
+  flyway:
+    enabled: true
+
   ai:
     # 추천 Service의 ChatClient가 이 모델 설정과 API 키를 사용한다.
     model:
