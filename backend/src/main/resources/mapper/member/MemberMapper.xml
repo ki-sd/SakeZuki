@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sakezuki.backend.member.mapper.MemberMapper">
+
+    <select id="findByEmail" parameterType="string" resultType="com.sakezuki.backend.member.vo.MemberVO">
+        SELECT no,
+               email,
+               password,
+               name,
+               address1,
+               address2,
+               phone,
+               status,
+               created_at AS createdAt,
+               updated_at AS updatedAt
+        FROM MEMBER
+        WHERE email=#{email}
+    </select>
+    
+    <select id="getAuthorities" parameterType="long" resultType="com.sakezuki.backend.member.vo.MemberAuthorityVO">
+        SELECT no,
+               member_no AS memberNo,
+               authority
+        FROM MEMBER_AUTHORITY
+        WHERE member_no=#{memberNo}
+    </select>
+
+</mapper>
