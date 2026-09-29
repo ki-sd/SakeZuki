@@ -1,5 +1,6 @@
 package com.sakezuki.backend.security;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
@@ -9,8 +10,9 @@ import java.util.Collection;
 import java.util.List;
 
 @RequiredArgsConstructor
+@Getter
 public class CustomUserDetails implements UserDetails {
-    private final Long mno;
+    private final Long memberNo;
     private final String email;
     private final String password;
     private final List<GrantedAuthority> authorities;
