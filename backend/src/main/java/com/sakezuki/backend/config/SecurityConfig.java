@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -21,7 +22,7 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
+	public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception{
 		http
 				.csrf(csrf->csrf.disable())
 				.sessionManagement(session->
@@ -32,7 +33,12 @@ public class SecurityConfig {
 						.requestMatchers("/api/sake/**","/api/auth/login","/api/recommend/**").permitAll()
 						.requestMatchers("/api/admin/**").hasRole("ADMIN")
 						.requestMatchers("/api/user/**").hasAnyRole("USER","ADMIN")
-						.anyRequest().permitAll());
+						.anyRequest().permitAll())
+				.oauth2ResourceServer(oAuth2->oAuth2
+						.jwt(jwt->jwt
+								.jwtAuthenticationConverter(jwtAuthenticationConverter)
+						)
+				);
 		return http.build();
 	}
 
