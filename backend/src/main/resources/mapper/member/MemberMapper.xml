@@ -25,4 +25,82 @@
         WHERE member_no=#{memberNo}
     </select>
 
+    <select id="findSocialAccount" parameterType="string" resultType="com.sakezuki.backend.member.vo.SocialAccountVO">
+        SELECT no,
+               member_no AS memberNo,
+               provider,
+               provider_user_id AS providerUserId
+        FROM SOCIAL_ACCOUNT
+        WHERE provider=#{provider}
+        AND provider_user_id=#{providerUserId}
+    </select>
+
+    <insert id="insertMember" parameterType="com.sakezuki.backend.member.vo.MemberVO"
+            useGeneratedKeys="true" keyProperty="no">
+        INSERT INTO MEMBER(
+            email,
+            name,
+            address1,
+            address2,
+            phone
+        )
+        VALUES (
+            #{email},
+            #{name},
+            #{address1},
+            #{address2},
+            #{phone}
+        )
+    </insert>
+
+    <insert id="insertSocialAccount" parameterType="com.sakezuki.backend.member.vo.SocialAccountVO">
+        INSERT INTO SOCIAL_ACCOUNT(
+            member_no,
+            provider,
+            provider_user_id
+        )
+        VALUES (
+            #{memberNo},
+            #{provider},
+            #{providerUserId}
+        )
+    </insert>
+
+    <insert id="insertAuthority">
+        INSERT INTO MEMBER_AUTHORITY(
+            member_no,
+            authority
+        )
+        VALUES (
+            #{memberNo},
+            #{authority}
+        )
+    </insert>
+
+    <insert id="insertGrade">
+        INSERT INTO MEMBER_GRADE(
+            member_no,
+            grade
+        )
+        VALUES (
+            #{memberNo},
+            #{grade}
+        )
+    </insert>
+
+    <select id="findByNo" parameterType="long" resultType="com.sakezuki.backend.member.vo.MemberVO">
+        SELECT no,
+               email,
+               password,
+               name,
+               address1,
+               address2,
+               phone,
+               status,
+               created_at AS createdAt,
+               updated_at AS updatedAt
+        FROM MEMBER
+        WHERE no=#{memberNo}
+    </select>
+
 </mapper>

@@ -1,5 +1,6 @@
 package com.sakezuki.backend.config;
 
+import com.sakezuki.backend.security.oauth.CustomOidcUserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -22,7 +23,7 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception{
+	public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter, CustomOidcUserService customOidcUserService) throws Exception{
 		http
 				.csrf(csrf->csrf.disable())
 				.sessionManagement(session->
@@ -38,7 +39,10 @@ public class SecurityConfig {
 						.jwt(jwt->jwt
 								.jwtAuthenticationConverter(jwtAuthenticationConverter)
 						)
-				);
+				)
+				.oauth2Login(oAuth2->oAuth2
+						.userInfoEndpoint(userInfo->userInfo
+								.oidcUserService(customOidcUserService)));
 		return http.build();
 	}
 

@@ -29,6 +29,7 @@ dependencies {
     implementation platform("org.springframework.ai:spring-ai-bom:2.0.1")
     implementation "org.springframework.ai:spring-ai-starter-model-google-genai"
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
     implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
     // flyway
     implementation 'org.springframework.boot:spring-boot-starter-flyway'

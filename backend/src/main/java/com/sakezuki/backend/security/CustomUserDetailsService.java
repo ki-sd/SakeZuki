@@ -25,10 +25,28 @@ public class CustomUserDetailsService implements UserDetailsService{
         if(member==null){
             throw new UsernameNotFoundException("아이디나 비밀번호가 잘못되었습니다.");
         }
+        return createUserDetails(member);
+    }
+
+    public CustomUserDetails loadUserByMemberNo(Long memberNo){
+        MemberVO member=mService.getLoginData(memberNo);
+        if(member==null){
+            throw new UsernameNotFoundException("회원 정보를 찾을 수 없습니다.");
+        }
+        return createUserDetails(member);
+    }
+
+    private CustomUserDetails createUserDetails(MemberVO member){
         List<GrantedAuthority> authorities=new ArrayList<>();
+
         for(MemberAuthorityVO vo:member.getAuthorities()){
             authorities.add(new SimpleGrantedAuthority(vo.getAuthority()));
         }
-        return new CustomUserDetails(member.getNo(),member.getEmail(),member.getPassword(),authorities);
+        return new CustomUserDetails(
+                member.getNo(),
+                member.getEmail(),
+                member.getPassword(),
+                authorities
+        );
     }
 }

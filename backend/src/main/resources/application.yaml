@@ -29,6 +29,18 @@ spring:
           model: gemini-3.5-flash-lite
           temperature: 0.4
 
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - openid
+              - profile
+              - email
+
 mybatis:
   # Mapper 인터페이스와 XML SQL을 연결하고 DB의 snake_case 열을 Java 필드명으로 매핑한다.
   mapper-locations: classpath:mapper/**/*.xml
