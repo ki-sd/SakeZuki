@@ -1,11 +1,15 @@
 package com.sakezuki.backend.config;
 
+import com.sakezuki.backend.auth.AuthProperties;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+@RequiredArgsConstructor
 public class WebConfig implements WebMvcConfigurer {
+    private final AuthProperties properties;
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
@@ -13,7 +17,7 @@ public class WebConfig implements WebMvcConfigurer {
         // 배포의 동일 출처 /api 경로는 Nginx가 Spring으로 전달한다.
         // Next.js 개발 서버 API 요청 허용
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:3000")
+                .allowedOrigins(properties.getFrontendUrl())
                 .allowedMethods("GET","POST","PUT","PATCH","DELETE","OPTIONS")
                 .allowedHeaders("*");
     }

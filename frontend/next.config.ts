@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+    distDir: process.env.AUTH_TEST_DIST_DIR ?? ".next",
     // Docker 실행 이미지는 빌드 결과의 standalone 서버만 복사해 사용한다.
     output:"standalone",
     experimental:{
@@ -13,18 +14,20 @@ const nextConfig: NextConfig = {
             return [];
         }
 
+        const backendOrigin = process.env.BACKEND_ORIGIN ?? "http://localhost:8080";
+
         return [
             {
                 source:"/oauth2/:path*",
-                destination:"http://localhost:8080/oauth2/:path*"
+                destination:`${backendOrigin}/oauth2/:path*`
             },
             {
                 source:"/login/oauth2/:path*",
-                destination:"http://localhost:8080/login/oauth2/:path*"
+                destination:`${backendOrigin}/login/oauth2/:path*`
             },
             {
                 source:"/api/:path*",
-                destination:"http://localhost:8080/api/:path*"
+                destination:`${backendOrigin}/api/:path*`
             }
         ];
     }

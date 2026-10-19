@@ -54,5 +54,28 @@ dependencyManagement {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform { excludeTags 'mysql-integration' }
+}
+
+tasks.register('authIntegrationTest', Test) {
+    description = 'Runs real MySQL and HTTP authentication tests against the isolated auth test database.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'mysql-integration' }
+    outputs.upToDateWhen { false }
+    doFirst {
+        if (!(System.getenv('AUTH_TEST_JDBC_URL') ==~ /jdbc:mysql:\/\/(localhost|127\.0\.0\.1):3308\/sakezuki_auth_it(\?.*)?/) ||
+                !System.getenv('AUTH_TEST_DB_PASSWORD')) {
+            throw new GradleException('Use scripts/test_auth_integration.py with its isolated MySQL database.')
+        }
+    }
+    shouldRunAfter tasks.named('test')
+}
+
+tasks.register('authE2eClasspath') {
+    dependsOn testClasses
+    doLast {
+        file("${layout.buildDirectory.get()}/auth-e2e-classpath.txt").text = sourceSets.test.runtimeClasspath.asPath
+    }
 }
