@@ -5,6 +5,6 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public class SocialSignupDTO {
+public class SocialSignupDTO implements java.io.Serializable {
     private String provider,providerUserId,email,name;
 }

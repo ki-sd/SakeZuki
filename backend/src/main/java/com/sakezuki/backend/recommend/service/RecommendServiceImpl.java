@@ -5,10 +5,11 @@ import com.sakezuki.backend.recommend.mapper.RecommendMapper;
 import com.sakezuki.backend.sake.dto.SakeDetailResponse;
 import com.sakezuki.backend.sake.service.SakeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RecommendServiceImpl implements RecommendService {
@@ -44,32 +45,32 @@ public class RecommendServiceImpl implements RecommendService {
 
         String normalizedFood=food.trim();
 
-        List<RecommendedSakeResponse> recommendations=
-                rMapper.getSakeRecommendList(normalizedFood);
+        List<RecommendedSakeResponse> recommendations=rMapper.getSakeRecommendList(normalizedFood);
+
+        log.info("기존 사케 추천 조회: food={}, count={}",normalizedFood,recommendations.size());
 
         if(recommendations.isEmpty()){
-
             // Gemini는 후보 검색 조건을 만들고, 실제 후보 제품은 MyBatis가 DB에서 가져온다.
             SakeRecommendCondition condition=gService.analyzeFood(normalizedFood);
 
-            List<SakeRecommendCandidate> candidates=
-                    rMapper.getSakeRecommendCandidates(condition);
+            List<SakeRecommendCandidate> candidates=rMapper.getSakeRecommendCandidates(condition);
+
+            log.info("사케 추천 후보 조회: food={}, count={}",normalizedFood,candidates.size());
 
             if(candidates.isEmpty()){
                 throw new IllegalStateException("추천 가능한 사케 후보가 없습니다.");
             }
 
             // 후보 안에서 고른 식별자와 추천 이유만 저장한다. 응답의 제품 정보는 다시 DB에서 읽는다.
-            List<SakeRerankItem> rerankItems=
-                    gService.rerankSake(
-                            normalizedFood,
-                            condition,
-                            candidates
-                    );
+            List<SakeRerankItem> rerankItems=gService.rerankSake(normalizedFood,condition,candidates);
+
+            log.info("Gemini 재선정 결과: food={}, count={}",normalizedFood,rerankItems.size());
 
             rMapper.insertSakeRecommend(normalizedFood,rerankItems);
 
             recommendations=rMapper.getSakeRecommendList(normalizedFood);
+
+            log.info("사케 추천 저장 후 조회: food={}, count={}",normalizedFood,recommendations.size());
         }
 
         if(recommendations.size()!=3){

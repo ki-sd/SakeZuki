@@ -23,6 +23,7 @@ public class JwtConfig {
     @Bean
     public SecretKey secretKey(){
         byte[] secret= Base64.getDecoder().decode(jwtProperties.getSecret());
+        if (secret.length < 32) throw new IllegalArgumentException("JWT_SECRET must be at least 32 random bytes, Base64 encoded");
         return new SecretKeySpec(secret, "HmacSHA256");
     }
 
@@ -33,7 +34,9 @@ public class JwtConfig {
 
     @Bean
     public JwtDecoder jwtDecoder(SecretKey secretKey){
-        return NimbusJwtDecoder.withSecretKey(secretKey).macAlgorithm(MacAlgorithm.HS256).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey).macAlgorithm(MacAlgorithm.HS256).build();
+        decoder.setJwtValidator(org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer(jwtProperties.getIssuer()));
+        return decoder;
     }
 
     @Bean

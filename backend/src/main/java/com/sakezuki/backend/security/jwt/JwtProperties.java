@@ -10,4 +10,5 @@ import java.time.Duration;
 public class JwtProperties {
     private String secret;
     private Duration accessTokenExpiration;
+    private String issuer = "sakezuki";
 }

@@ -9,4 +9,6 @@ public interface AuthService {
     public LoginResponseDTO login(LoginRequestDTO dto);
     public LoginResponseDTO socialSignup(SocialSignupDTO signupInfo, SocialSignupRequestDTO dto);
     public LoginResponseDTO socialLogin(Long memberNo);
+    LoginResponseDTO refresh(String refreshToken);
+    void logout(String refreshToken);
 }

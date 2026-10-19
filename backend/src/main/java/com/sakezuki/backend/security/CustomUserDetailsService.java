@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ public class CustomUserDetailsService implements UserDetailsService{
     }
 
     private CustomUserDetails createUserDetails(MemberVO member){
+        if (!"ACTIVE".equals(member.getStatus())) throw new DisabledException("사용할 수 없는 계정입니다.");
         List<GrantedAuthority> authorities=new ArrayList<>();
 
         for(MemberAuthorityVO vo:member.getAuthorities()){

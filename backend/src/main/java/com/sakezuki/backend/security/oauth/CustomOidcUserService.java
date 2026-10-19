@@ -6,6 +6,7 @@ import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 
 @Service
 @RequiredArgsConstructor
@@ -16,10 +17,10 @@ public class CustomOidcUserService implements OAuth2UserService<OidcUserRequest,
     public OidcUser loadUser(OidcUserRequest userRequest){
         OidcUser oidcUser=oService.loadUser(userRequest);
 
-        String provider=userRequest.getClientRegistration().getRegistrationId().toUpperCase();
-        String providerUserId=oidcUser.getSubject();
-        String email=oidcUser.getEmail();
-        String name=oidcUser.getFullName();
+        if (!"google".equals(userRequest.getClientRegistration().getRegistrationId())
+                || !Boolean.TRUE.equals(oidcUser.getEmailVerified())
+                || oidcUser.getSubject() == null || oidcUser.getEmail() == null)
+            throw new OAuth2AuthenticationException("invalid_google_identity");
 
         return oidcUser;
     }

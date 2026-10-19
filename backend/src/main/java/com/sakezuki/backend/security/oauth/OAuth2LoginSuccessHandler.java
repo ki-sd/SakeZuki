@@ -2,6 +2,9 @@ package com.sakezuki.backend.security.oauth;
 
 import com.sakezuki.backend.member.service.MemberService;
 import com.sakezuki.backend.member.vo.SocialAccountVO;
+import com.sakezuki.backend.auth.AuthProperties;
+import org.springframework.security.core.context.SecurityContextHolder;
+import java.time.Instant;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,6 +21,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final MemberService mService;
+    private final AuthProperties properties;
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
@@ -28,6 +32,11 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         String providerUserId=oidcUser.getSubject();
 
         SocialAccountVO socialAccount=mService.findSocialAccount(provider,providerUserId);
+        request.getSession().invalidate();
+        SecurityContextHolder.clearContext();
+        var session = request.getSession(true);
+        session.setMaxInactiveInterval((int) properties.getSocialExpiration().getSeconds());
+        Instant expiry = Instant.now().plus(properties.getSocialExpiration());
         if(socialAccount==null){
             SocialSignupDTO signupInfo=new SocialSignupDTO(
                     provider,
@@ -35,12 +44,12 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                     oidcUser.getEmail(),
                     oidcUser.getFullName()
             );
-            request.getSession().setAttribute("socialSignup",signupInfo);
+            session.setAttribute(SocialLoginState.KEY, new SocialLoginState(signupInfo, null, expiry));
 
-            response.sendRedirect("http://localhost:3000/signup/social");
+            response.sendRedirect(properties.getFrontendUrl()+"/signup/social");
             return;
         }
-        request.getSession().setAttribute("socialLoginMemberNo",socialAccount.getMemberNo());
-        response.sendRedirect("http://localhost:3000/oauth/callback");
+        session.setAttribute(SocialLoginState.KEY, new SocialLoginState(null, socialAccount.getMemberNo(), expiry));
+        response.sendRedirect(properties.getFrontendUrl()+"/oauth/callback");
     }
 }

@@ -2,6 +2,7 @@
 
 import {QueryClient,QueryClientProvider} from "@tanstack/react-query";
 import {useState} from "react";
+import AuthProvider from "@/components/auth/AuthProvider";
 
 // QueryClientProvider가 하위 페이지에 서버 상태 캐시를 공유하므로 Client Component가 필요하다.
 // useState의 초기화 함수로 QueryClient를 한 번만 만들어 다시 렌더링되어도 캐시가 유지되게 한다.
@@ -11,7 +12,7 @@ export default function Providers({children}:{children:React.ReactNode}){
 
     return (
         <QueryClientProvider client={queryClient}>
-            {children}
+            <AuthProvider>{children}</AuthProvider>
         </QueryClientProvider>
     )
 }
