@@ -1,0 +1,16 @@
+# 같은 Compose 프로젝트 이름을 유지해야 기존 MySQL 볼륨을 그대로 사용한다.
+services:
+  backend:
+    environment:
+      AUTH_FRONTEND_URL: https://${PUBLIC_HOST:?공개 도메인을 설정하세요}
+      GOOGLE_REDIRECT_URI: https://${PUBLIC_HOST:?공개 도메인을 설정하세요}/login/oauth2/code/google
+      AUTH_SECURE_COOKIES: "true"
+  nginx:
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?공개 도메인을 설정하세요}
+      NGINX_ENVSUBST_FILTER: ^PUBLIC_HOST$
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/https.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${TLS_CERT_DIR:?인증서 디렉터리를 설정하세요}:/etc/nginx/tls:ro

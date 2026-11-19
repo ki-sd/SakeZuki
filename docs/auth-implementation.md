@@ -1,3 +1,7 @@
+# 현재 정책 안내
+
+이 문서의 초기 인증 흐름 이후 본인확인·크레딧 경계와 신규 가입 약관 검증이 추가되었습니다. 현재 동작은 [2026-11-19 검증 보고서](security-credits-validation-2026-11-19.md)와 [공개 배포 준비](oci-public-deployment.md)를 우선 확인하세요. 추천 API는 더 이상 비회원 공개 API가 아닙니다.
+
 # 인증 구현 및 검증 보고
 
 검증일: 2026-10-19. 로컬 `main` 기준으로 구현했으며 커밋·푸시는 하지 않았다.
@@ -131,3 +135,6 @@ docs/auth-implementation.md
 ```
 
 구현 API 확인에는 [Spring Security CSRF 문서](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html), [OAuth2 문서](https://docs.spring.io/spring-security/reference/servlet/oauth2/index.html), [Next.js rewrite 문서](https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites)와 설치된 Next.js 16.3.5의 App Router 문서를 참고했다.
+# 현재 정책 안내
+
+이 문서의 초기 인증 흐름 이후 본인확인·크레딧 경계와 신규 가입 약관 검증이 추가되었습니다. 현재 동작은 [2026-11-19 검증 보고서](security-credits-validation-2026-11-19.md)와 [공개 배포 준비](oci-public-deployment.md)를 우선 확인하세요. 추천 API는 더 이상 비회원 공개 API가 아닙니다.

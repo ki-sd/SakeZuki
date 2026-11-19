@@ -66,7 +66,7 @@ pipeline {
 
                     echo "서비스 응답 확인"
                     for i in $(seq 1 12); do
-                        if curl -fsS http://localhost/ >/dev/null; then
+                        if curl -fsSL --max-time 10 "${HEALTHCHECK_URL:-http://localhost/api/health/ready}" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
                             echo "SakeZuki 응답 확인 완료"
                             exit 0
                         fi
@@ -76,7 +76,8 @@ pipeline {
                     done
 
                     echo "서비스 응답 확인 실패"
-                    docker compose logs --tail=100
+                    # 원문 사업자 오류가 CI 로그로 복사되지 않도록 상태만 확인한다.
+                    docker compose ps
                     exit 1
                 '''
             }

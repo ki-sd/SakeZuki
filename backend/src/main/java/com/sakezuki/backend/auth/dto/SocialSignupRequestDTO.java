@@ -5,4 +5,5 @@ import lombok.Data;
 @Data
 public class SocialSignupRequestDTO {
     private String address1,address2,phone;
+    private String termsVersion,privacyVersion;
 }

@@ -9,6 +9,7 @@ let accessToken: string | null = null;
 let refreshRequest: Promise<void> | null = null;
 let bootstrapRequest: Promise<void> | null = null;
 let oauthRequest: Promise<void> | null = null;
+let localLock: Promise<unknown> = Promise.resolve();
 const listeners = new Set<() => void>();
 const transport = axios.create({ baseURL: "/api/auth", timeout: 10000, withCredentials: true });
 const serverState: AuthState = { status: "loading", member: null };
@@ -25,10 +26,12 @@ export const authStore = {
 };
 
 async function locked<T>(operation: () => Promise<T>): Promise<T> {
-    // Serialize cookie rotation across tabs as well as within this page.
+    // HTTPS의 Web Locks로 탭 간 쿠키 회전을 직렬화한다. 지원하지 않는 환경도 현재 탭에서는 순서를 지킨다.
     if (typeof navigator !== "undefined" && navigator.locks)
         return navigator.locks.request("sakezuki-auth", operation);
-    return operation();
+    const next = localLock.then(operation, operation);
+    localLock = next.catch(() => undefined);
+    return next;
 }
 
 async function post<T>(path: string, data?: unknown): Promise<T> {
@@ -75,7 +78,7 @@ export function completeOAuth() {
     return oauthRequest;
 }
 
-export async function socialSignup(data: { address1: string; address2: string; phone: string }) {
+export async function socialSignup(data: { address1: string; address2: string; phone: string; termsVersion: string; privacyVersion: string }) {
     await locked(async () => { await accept(await post<Tokens>("/social/signup", data)); });
 }
 
@@ -90,6 +93,9 @@ export async function logout() {
 export async function signupInfo() {
     return (await transport.get<{ provider: string; email: string; name: string }>("/social/signup-info")).data;
 }
+export async function signupPolicy() {
+    return (await transport.get<{ termsVersion: string; privacyVersion: string; termsUrl: string; privacyUrl: string; enabled: boolean }>("/signup-policy")).data;
+}
 
 export function errorMessage(error: unknown) {
     if (axios.isAxiosError(error)) {
@@ -102,9 +108,14 @@ export function errorMessage(error: unknown) {
 
 export function safeReturnTo(value: string | null) {
     if (!value || !value.startsWith("/") || value.startsWith("//") || /[\\\s]/.test(value)) return "/sake";
-    const path = value.split(/[?#]/)[0];
-    if (["/login", "/oauth/callback", "/signup/social"].includes(path)) return "/sake";
-    return value;
+    // 인코딩된 구분자와 점 경로까지 정규화해 로그인 복귀 루프·외부 이동 해석 차이를 줄인다.
+    if (/%(?:2f|5c|00|0a|0d)/i.test(value)) return "/sake";
+    try {
+        const url = new URL(value, "https://sakezuki.invalid");
+        const path = decodeURIComponent(url.pathname).replace(/\/+$/, "");
+        if (url.origin !== "https://sakezuki.invalid" || ["/login", "/oauth/callback", "/signup/social"].includes(path)) return "/sake";
+        return url.pathname + url.search + url.hash;
+    } catch { return "/sake"; }
 }
 
 export function finishDestination() {
@@ -127,7 +138,7 @@ api.interceptors.response.use(response => response, async error => {
         try { await refresh(); }
         catch (refreshError) {
             // These APIs are public; an expired login must not prevent browsing or pairing.
-            if (/^\/(sake|recommend)(\/|$)/.test(config.url ?? "")) {
+            if (/^\/sake(\/|$)/.test(config.url ?? "")) {
                 delete config.headers.Authorization;
                 return api(config);
             }
