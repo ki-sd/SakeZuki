@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '4.1.1'
+    id 'org.springframework.boot' version '4.1.2'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -51,6 +51,10 @@ dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
     }
+    dependencies {
+        // Google SDK의 전이 버전도 native 역직렬화 메모리 고갈 패치가 적용된 버전으로 맞춘다.
+        dependency 'com.google.guava:guava:33.7.2-jre'
+    }
 }
 
 tasks.named('test') {
@@ -77,5 +81,16 @@ tasks.register('authE2eClasspath') {
     dependsOn testClasses
     doLast {
         file("${layout.buildDirectory.get()}/auth-e2e-classpath.txt").text = sourceSets.test.runtimeClasspath.asPath
+    }
+}
+
+tasks.register('securityDependencies') {
+    description = 'Writes resolved runtime dependencies for a separate advisory scan; no credentials are included.'
+    group = 'verification'
+    doLast {
+        def dependencies = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collect {
+            [name: "${it.moduleVersion.id.group}:${it.moduleVersion.id.name}", version: it.moduleVersion.id.version]
+        }.unique()
+        file("${layout.buildDirectory.get()}/security-dependencies.json").text = groovy.json.JsonOutput.toJson(dependencies)
     }
 }
