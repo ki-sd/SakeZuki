@@ -31,7 +31,7 @@ test("lost recommendation response replays without charging twice; history reope
     await expect(label).toContainText(`잔여 크레딧 ${before-1}개`);
     await page.goto("/account");
     await expect(page.getByText(`잔여 크레딧 ${before-1}개`,{exact:true})).toBeVisible();
-    await page.getByRole("button",{name:"결과 다시 보기",exact:true}).first().click();
+    await page.getByRole("link",{name:"결과 다시 보기",exact:true}).first().click();
     await expect(page.getByRole("heading",{name:"당시 제공된 추천 결과"})).toBeVisible();
     await expect(page.getByText(`잔여 크레딧 ${before-1}개`,{exact:true})).toBeVisible();
     expect(keys).toHaveLength(2);

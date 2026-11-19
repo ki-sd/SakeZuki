@@ -20,6 +20,15 @@ public class AccountController {
     private final CreditProperties creditPolicy;
     public record Consent(String termsVersion, String privacyVersion) {}
     public record Proof(String requestId, String proof) {}
+    public record Condition(String kind, String food, Long sakeNo) {}
+    public record Match(CreditMapper.History match) {}
+
+    @PostMapping("/recommendations/match")
+    public ResponseEntity<Match> match(@AuthenticationPrincipal Jwt jwt, @RequestBody Condition input) {
+        var condition = com.sakezuki.backend.recommend.RecommendationCondition.of(input.kind(), input.food(), input.sakeNo());
+        // 안내용 조회와 유료 요청을 분리해 확인만으로 예약·AI 호출이 발생하지 않게 한다.
+        return privateResult(new Match(credits.latestMatching(Long.valueOf(jwt.getSubject()), condition.hash(), Instant.now().getEpochSecond())));
+    }
 
     @GetMapping("/account")
     public ResponseEntity<?> account(@AuthenticationPrincipal Jwt jwt) {
@@ -49,7 +58,12 @@ public class AccountController {
     public ResponseEntity<String> detail(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
         var request = credits.byId(Long.valueOf(jwt.getSubject()), id);
         if (request == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "추천 기록을 찾을 수 없습니다.");
-        return privateResult(PaidRecommendationService.replay(request));
+        String snapshot = PaidRecommendationService.replay(request);
+        // 기존 JSON 계약을 바꾸지 않고 상세 화면에 필요한 시각만 헤더로 전달한다.
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .header("X-Recommendation-Type", request.kind())
+                .header("X-Recommendation-Completed-At", request.completedAtEpoch().toString())
+                .header("X-Recommendation-Expires-At", request.expiresAtEpoch().toString()).body(snapshot);
     }
     @GetMapping("/credits/ledger")
     public ResponseEntity<?> ledger(@AuthenticationPrincipal Jwt jwt, @RequestParam(defaultValue = "0") int page) {

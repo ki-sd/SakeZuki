@@ -48,4 +48,31 @@
 - Set-Cookie의 Secure·HttpOnly·SameSite·Path와 CSRF 403, 미인증 401, 미확인 403, 잔액 부족 402를 확인한다.
 - backend 직접 접근·위조 forwarded 헤더·타 출처 요청을 차단하고 edge 요청 제한이 적용되는지 확인한다.
 - Flyway V5·기존 회원 및 사케 행 보존·원장 잔액과 예약 복구를 확인한다.
-- Linux/OCI CPU 아키텍처에서 Docker 이미지 빌드·실기동·인증서 갱신·재시작 복구를 확인한다. 이 작업에서는 native Windows 도구로 구문과 HTTP 동작을 검증했으며 실제 Linux 컨테이너 검증을 대신하지 않는다.
+- Linux/OCI CPU 아키텍처에서 Docker 이미지 빌드·실기동·인증서 갱신·재시작 복구를 확인한다. 후속 검증은 `python3 scripts/test_public_containers.py`와 [공개 UI 검증 기록](public-ui-validation-2026-11-19.md)을 따른다. CI의 amd64 결과만으로 OCI A1 arm64 호환성을 확인한 것으로 취급하지 않는다.
+
+## 백업·복구와 공개 후 점검
+
+아래는 운영자 실행 절차이며 이번 개발 과정에서 운영 DB에 실행하지 않았다. Compose 파일 집합과 기존 프로젝트 이름을 먼저 확인한다. 비밀값을 터미널에 출력하지 않고 백업 파일은 외부 공개 경로와 Git 밖에 보관한다.
+
+```bash
+set -e
+umask 077
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --routines --triggers --events --databases "$MYSQL_DATABASE"' > sakezuki-backup.sql
+test -s sakezuki-backup.sql
+```
+
+백업은 별도 테스트 MySQL에 먼저 복원해 회원·사케·원장 행 수, 합계 잔액, Flyway history를 확인한다. 운영 복원은 쓰기 중단과 복원 시점을 승인한 뒤 별도로 수행한다. 새 테이블에 데이터를 기록한 뒤 구버전 이미지만 돌리는 롤백은 데이터 정책과 호환성을 검토해야 한다. 기존 V1-V5를 수정하거나 Flyway clean으로 재적용하지 않는다.
+
+공개 도메인을 셸 변수에 넣어 다음 GET 점검을 수행한다. 인증서는 기본 trust store로 검사하고 응답에 토큰·계정 목록·DB 오류가 없어야 한다.
+
+```bash
+curl -fsS "https://$PUBLIC_HOST/api/health/ready"
+curl -fsS "https://$PUBLIC_HOST/api/examples/recommendations"
+curl -sSI "http://$PUBLIC_HOST/"
+curl -sS -o /dev/null -w '%{http_code}\n' "https://$PUBLIC_HOST/api/user/account"
+docker compose ps
+```
+
+readiness는 `UP`, HTTP는 정해진 HTTPS 도메인으로 308, 비회원 account는 401이어야 한다. 브라우저에서 랜딩·모바일·무료 예시·검색·상세를 확인한 뒤 기존 Google 계정 로그인, 새로고침 복원, 로그아웃을 검증한다. 본인확인 전에는 자유 입력 AI 추천과 무료 크레딧 발급이 차단되어야 한다. 정상적인 미연동 안내를 장애로 오인하지 않는다.
+
+장애 시 Nginx 접근 상태 코드와 제한 발생 여부, 컨테이너 상태, 인증서 만료·마운트·DNS, backend readiness 및 Flyway 실패를 순서대로 확인한다. OAuth code·JWT·쿠키·사업자 증표가 포함된 원문 요청을 로그에 복사하지 않는다. 30일 기록 만료는 기록 화면만 제한하며 원장 삭제로 처리하지 않는다. 현재 OAuth 임시 가입은 서버 세션이므로 단일 인스턴스 전제를 유지하고, 확장 시 세션 공유·프록시 신뢰·메모리 제한기 정책부터 검토한다.
