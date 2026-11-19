@@ -5,6 +5,14 @@ import { FoodRecommendRequest, FoodRecommendResponse, SakeRecommendRequest, Sake
 
 // 결과를 받지 못한 요청 키는 탭 새로고침 뒤에도 재사용한다. 원문 입력·토큰은 저장하지 않는다.
 const pending = new Map<string, Promise<unknown>>();
+async function storageSlot(kind: string, input: FoodRecommendRequest | SakeRecommendRequest, member: number | undefined) {
+    const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(input)));
+    const hash = Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, "0")).join("");
+    return "sakezuki-request:" + member + ":" + kind + ":" + hash;
+}
+export async function hasPendingRecommendation(kind: string, input: FoodRecommendRequest | SakeRecommendRequest) {
+    return sessionStorage.getItem(await storageSlot(kind, input, authStore.snapshot().member?.memberNo)) !== null;
+}
 function paid<T>(kind: string, input: FoodRecommendRequest | SakeRecommendRequest): Promise<T> {
     const member = authStore.snapshot().member?.memberNo;
     const identity = member + ":" + kind + ":" + JSON.stringify(input);
@@ -12,9 +20,7 @@ function paid<T>(kind: string, input: FoodRecommendRequest | SakeRecommendReques
     if (existing) return existing as Promise<T>;
     const operation = (async () => {
         // 비동기 해시 계산 전에 in-flight 요청을 등록해 빠른 캐시 응답에서도 더블클릭을 합친다.
-        const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(input)));
-        const hash = Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, "0")).join("");
-        const slot = "sakezuki-request:" + member + ":" + kind + ":" + hash;
+        const slot = await storageSlot(kind, input, member);
         const key = sessionStorage.getItem(slot) ?? crypto.randomUUID();
         sessionStorage.setItem(slot, key);
         try {

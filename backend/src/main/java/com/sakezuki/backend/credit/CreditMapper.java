@@ -8,7 +8,12 @@ public interface CreditMapper {
     record Request(String id, Long memberNo, String idempotencyKey, String payloadHash, String kind,
                    String inputValue, String status, String resultSnapshot, long createdAtEpoch,
                    Long completedAtEpoch, Long expiresAtEpoch) {}
-    record History(String id, String kind, String inputValue, long completedAtEpoch, long expiresAtEpoch) {}
+    record History(String id, String kind, String inputValue, long completedAtEpoch, long expiresAtEpoch, String inputLabel) {}
+    String HISTORY_COLUMNS = "r.id,r.kind,r.input_value,r.completed_at_epoch,r.expires_at_epoch," +
+            "CASE WHEN r.kind='SAKE' THEN r.input_value ELSE COALESCE(" +
+            "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(r.result_snapshot,'$.sake.nameKo')),'null')," +
+            "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(r.result_snapshot,'$.sake.nameJa')),'null')," +
+            "CONCAT('사케 #',r.input_value)) END AS input_label ";
     record Entry(long id, String referenceId, String kind, long delta, long balanceAfter, long createdAtEpoch) {}
 
     @Select("SELECT status FROM MEMBER WHERE no=#{member} FOR UPDATE")
@@ -40,10 +45,16 @@ public interface CreditMapper {
             "VALUES(#{member},#{reference},#{kind},#{delta},#{balance},#{now})")
     void ledger(@Param("member") Long member, @Param("reference") String reference, @Param("kind") String kind,
                 @Param("delta") long delta, @Param("balance") long balance, @Param("now") long now);
-    @Select("SELECT id,kind,input_value,completed_at_epoch,expires_at_epoch FROM RECOMMEND_REQUEST " +
-            "WHERE member_no=#{member} AND status='COMPLETED' AND expires_at_epoch>#{now} " +
-            "ORDER BY completed_at_epoch DESC,id DESC LIMIT 30 OFFSET #{offset}")
+    @Select("SELECT " + HISTORY_COLUMNS + "FROM RECOMMEND_REQUEST r LEFT JOIN CREDIT_LEDGER l ON l.member_no=r.member_no AND l.reference_id=r.id AND l.kind='COMMIT' " +
+            "WHERE r.member_no=#{member} AND r.status='COMPLETED' AND r.expires_at_epoch>#{now} AND r.result_snapshot IS NOT NULL " +
+            "ORDER BY r.completed_at_epoch DESC,l.id DESC,r.id DESC LIMIT 30 OFFSET #{offset}")
     List<History> history(@Param("member") Long member, @Param("now") long now, @Param("offset") int offset);
+    // 개인 기록에서만 찾는다. 공용 캐시 적중은 무료 열람 권리를 의미하지 않는다.
+    @Select("SELECT " + HISTORY_COLUMNS + "FROM RECOMMEND_REQUEST r LEFT JOIN CREDIT_LEDGER l ON l.member_no=r.member_no AND l.reference_id=r.id AND l.kind='COMMIT' " +
+            "WHERE r.member_no=#{member} AND r.payload_hash=#{hash} AND r.status='COMPLETED' " +
+            "AND r.expires_at_epoch>#{now} AND r.result_snapshot IS NOT NULL " +
+            "ORDER BY r.completed_at_epoch DESC,l.id DESC,r.id DESC LIMIT 1")
+    History latestMatching(@Param("member") Long member, @Param("hash") String hash, @Param("now") long now);
     @Select("SELECT id,reference_id,kind,delta,balance_after,created_at_epoch FROM CREDIT_LEDGER WHERE member_no=#{member} ORDER BY id DESC LIMIT 50 OFFSET #{offset}")
     List<Entry> entries(@Param("member") Long member, @Param("offset") int offset);
     @Select("SELECT * FROM RECOMMEND_REQUEST WHERE status='RESERVED' AND created_at_epoch<#{before} ORDER BY created_at_epoch LIMIT 100")

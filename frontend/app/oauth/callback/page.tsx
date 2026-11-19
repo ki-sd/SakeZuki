@@ -15,7 +15,7 @@ export default function OAuthCallback() {
             .catch(error => { if (active) setError(errorMessage(error)); });
         return () => { active = false; };
     }, [router]);
-    return <><Header /><main className="page-shell py-16"><div className="ui-state" role="status">
+    return <><Header /><main id="main-content" className="page-shell py-16"><div className="ui-state" role="status">
         {error ? <><p role="alert">{error}</p><Link href="/login" className="mt-5 inline-block underline">다시 로그인</Link></> : "Google 로그인을 완료하고 있습니다…"}
     </div></main></>;
 }

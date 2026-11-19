@@ -138,7 +138,7 @@ api.interceptors.response.use(response => response, async error => {
         try { await refresh(); }
         catch (refreshError) {
             // These APIs are public; an expired login must not prevent browsing or pairing.
-            if (/^\/sake(\/|$)/.test(config.url ?? "")) {
+            if (/^\/(sake|examples)(\/|$)/.test(config.url ?? "")) {
                 delete config.headers.Authorization;
                 return api(config);
             }

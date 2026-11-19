@@ -48,7 +48,7 @@ export default function SakePage(){
         <>
             <Header/>
 
-            <main className={"pb-16"}>
+            <main id="main-content" className={"pb-16"}>
                 {/* 목록 상단 검색 영역 */}
                 <section className={"border-b border-stone-200 bg-white"}>
                     <div className={"page-shell py-8 sm:py-10"}>

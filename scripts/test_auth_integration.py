@@ -1,8 +1,10 @@
 """Disposable MySQL/HTTP tests. Does not read .env or touch the application DB volume."""
 import argparse
+import base64
 import os
 from pathlib import Path
 import secrets
+import re
 import subprocess
 import sys
 import time
@@ -22,6 +24,10 @@ def main():
                AUTH_TEST_JDBC_URL="jdbc:mysql://127.0.0.1:3308/sakezuki_auth_it?serverTimezone=UTC&characterEncoding=UTF-8")
     env.update(AUTH_TEST_LOGIN_EMAIL=secrets.token_hex(12) + "@example.invalid", AUTH_TEST_LOGIN_PASSWORD=secrets.token_urlsafe(24),
                AUTH_TEST_BASE_URL="http://localhost:3001", BACKEND_ORIGIN="http://127.0.0.1:8081", AUTH_TEST_DIST_DIR=".next-auth-e2e")
+    # 일반 기동 테스트도 같은 분리 DB만 사용한다. 기존 .env를 테스트 설정으로 가져오지 않는다.
+    env.update(SPRING_CONFIG_IMPORT="", MYSQL_HOST="127.0.0.1", MYSQL_PORT="3308", MYSQL_DATABASE="sakezuki_auth_it",
+               MYSQL_USER=env["AUTH_TEST_DB_USER"], MYSQL_PASSWORD=env["AUTH_TEST_DB_PASSWORD"], JWT_SECRET=base64.b64encode(secrets.token_bytes(32)).decode("ascii"),
+               GOOGLE_CLIENT_ID="isolated-test", GOOGLE_CLIENT_SECRET="isolated-test", GEMINI_API_KEY="isolated-test")
     compose = ["docker", "compose", "-p", "sakezuki-auth-it", "-f", str(ROOT / "compose.auth-test.yaml")]
     children = []
     logs = []
@@ -30,11 +36,13 @@ def main():
     tsconfig_generated = None
     try:
         subprocess.run(compose + ["up", "-d", "--wait"], env=env, cwd=ROOT, check=True)
-        gradle = [str(ROOT / "backend" / ("gradlew.bat" if os.name == "nt" else "gradlew")), "authIntegrationTest", "--no-daemon"]
+        # 저장소 wrapper의 실행 비트와 관계없이 Linux에서도 동일한 검증을 실행한다.
+        wrapper = [str(ROOT / "backend" / "gradlew.bat")] if os.name == "nt" else ["bash", str(ROOT / "backend" / "gradlew")]
+        gradle = wrapper + ["test", "authIntegrationTest", "--no-daemon"]
         result = subprocess.run(gradle, env=env, cwd=ROOT / "backend")
         if result.returncode or not args.e2e:
             return result.returncode
-        subprocess.run([gradle[0], "authE2eClasspath", "--no-daemon"], env=env, cwd=ROOT / "backend", check=True)
+        subprocess.run(wrapper + ["authE2eClasspath", "--no-daemon"], env=env, cwd=ROOT / "backend", check=True)
         classpath = (ROOT / "backend/build/auth-e2e-classpath.txt").read_text().replace("\\", "/")
         java_args = ROOT / "backend/build/auth-e2e.args"
         java_args.write_text('-cp\n"' + classpath + '"\ncom.sakezuki.backend.auth.AuthE2eServer\n', encoding="utf-8")
@@ -49,7 +57,11 @@ def main():
         wait_http("http://127.0.0.1:8081/api/sake/list", backend)
         # The fixture insertion occurs immediately after the HTTP server starts.
         for _ in range(100):
-            if "AUTH_E2E_READY" in (ROOT / "backend/build/auth-e2e-backend.log").read_text(encoding="utf-8", errors="replace"):
+            backend_log = (ROOT / "backend/build/auth-e2e-backend.log").read_text(encoding="utf-8", errors="replace")
+            food = re.search(r"AUTH_E2E_FOOD=(.+)", backend_log)
+            if "AUTH_E2E_READY" in backend_log and food:
+                # 합성 캐시 조건을 전달해 크레딧 E2E가 환경 누락으로 skip되지 않게 한다.
+                env["AUTH_TEST_FOOD"] = food.group(1).strip()
                 break
             time.sleep(0.1)
         else:

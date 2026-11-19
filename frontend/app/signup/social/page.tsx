@@ -27,7 +27,7 @@ export default function SocialSignup() {
         } catch (error) { setError(errorMessage(error)); }
         finally { setBusy(false); }
     }
-    return <><Header /><main className="page-shell py-12">
+    return <><Header /><main id="main-content" className="page-shell py-12">
         <section className="ui-panel mx-auto max-w-lg p-6 sm:p-9">
             <h1 className="text-3xl font-semibold">가입을 마무리해 주세요</h1>
             <p className="mt-3 text-sm text-stone-500">Google 계정에 연락처와 주소를 추가합니다. 정식 회원 전환과 무료 크레딧 지급에는 약관 동의 및 본인확인·성인확인이 필요합니다.</p>
