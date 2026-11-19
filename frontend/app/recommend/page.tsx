@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/Header";
-import PairingResult from "@/components/recommend/PairingResult";
+import PairingResult, { ProductFacts } from "@/components/recommend/PairingResult";
+import SakeImage from "@/components/sake/SakeImage";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorMessage } from "@/app/api/auth";
 import { getAccount, type History } from "@/app/api/account";
@@ -34,6 +35,7 @@ function RecommendContent() {
     const initial = useQuery({ queryKey: ["sakeDetail", initialNo], queryFn: () => getSakeDetail(initialNo), enabled: validNo, retry: false });
     const initialSake: SakeSearchItem | null = initial.data ? { no: initial.data.no, nameKo: initial.data.nameKo, nameJa: initial.data.nameJa, imageUrl: initial.data.imageUrl } : null;
     const current = selected ?? initialSake;
+    const selectedDetail = useQuery({ queryKey: ["sakeDetail", current?.no], queryFn: () => getSakeDetail(current!.no), enabled: mode === "FOOD" && !!current, retry: false, staleTime: 60000 });
     const searchQuery = useQuery({ queryKey: ["sakeSearch", search], queryFn: () => searchSake(search.trim()), enabled: mode === "FOOD" && search.trim().length >= 2 && !selected && !validNo, staleTime: 30000, retry: false });
     const allowed = auth.status === "authenticated" && !!account.data?.verified;
     const currentDuplicate = duplicate?.owner === auth.member?.memberNo ? duplicate : null;
@@ -92,7 +94,8 @@ function RecommendContent() {
                         {!selected && !validNo && search.trim().length >= 2 && searchQuery.data && <ul className="max-h-64 overflow-auto rounded-md border border-stone-200">
                             {searchQuery.data.map(item => <li key={item.no}><button type="button" disabled={busy} className="w-full min-h-11 px-4 py-3 text-left text-sm hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => { clearResult(); setSelected(item); }}>{item.nameKo || item.nameJa}</button></li>)}
                             {!searchQuery.data.length && <li className="p-4 text-sm text-stone-500">검색 결과가 없습니다.</li>}</ul>}
-                        {current && <p className="text-sm text-stone-600">선택한 제품: <Link className="underline" href={`/sake/${current.no}`}>{current.nameKo || current.nameJa}</Link></p>}
+                        {current && <div className="flex gap-4 rounded-md bg-stone-50 p-4"><div className="relative h-24 w-16 shrink-0"><SakeImage src={current.imageUrl} alt={current.nameKo || current.nameJa} /></div><div className="min-w-0 flex-1 space-y-3"><p className="break-words text-sm text-stone-600">선택한 제품: <Link className="underline" href={`/sake/${current.no}`}>{current.nameKo || current.nameJa}</Link></p>
+                            {selectedDetail.data && <ProductFacts product={selectedDetail.data} />}</div></div>}
                     </div>}
                 <button className="ui-button" disabled={!allowed || busy || (mode === "SAKE" ? !food.trim() : !current)}>{busy ? "추천 요청 확인 중…" : "추천받기"}</button>
                 <p className="text-xs leading-6 text-stone-500">먼저 최근 기록을 확인합니다. 같은 조건의 유효한 기록이 있으면 무료 열람과 새 요청 중 선택할 수 있습니다.</p>

@@ -36,7 +36,7 @@ export default function Home() {
             <div className="mt-8 rounded-lg bg-stone-100 p-6 text-sm leading-7 text-stone-600"><h3 className="font-semibold text-stone-800">AI가 제품을 지어내지 않도록</h3><p className="mt-2">음식에서 사케를 찾는 추천은 DB에서 실제 제품 후보를 조회한 뒤 AI가 후보를 고르는 구조입니다. 공용 캐시를 재사용해 외부 API 호출을 줄이고, 회원별 기록은 당시 결과의 스냅샷으로 따로 보관합니다.</p></div>
         </section>
         <section className="border-y border-stone-200 bg-white"><div className="page-shell space-y-8 py-14 sm:py-20">
-            <div><p className="text-xs font-semibold tracking-wider text-stone-500">A TASTE OF PAIRING</p><h2 className="mt-3 text-2xl font-semibold sm:text-3xl">로그인 없이 살펴보는 페어링</h2><p className="mt-4 max-w-2xl text-sm leading-7 text-stone-600">현재 공개 자료는 시드의 실재 제품을 대조해 직접 작성한 편집 예시입니다. 실제 AI가 생성한 결과나 이용자 추천 기록으로 표시하지 않습니다.</p></div>
+            <div><p className="text-xs font-semibold tracking-wider text-stone-500">A TASTE OF PAIRING</p><h2 className="mt-3 text-2xl font-semibold sm:text-3xl">로그인 없이 살펴보는 페어링</h2><p className="mt-4 max-w-2xl text-sm leading-7 text-stone-600">현재 공개 자료는 실제 사케 정보를 확인해 직접 작성한 편집 예시입니다. 실제 AI가 생성한 결과나 이용자 추천 기록으로 표시하지 않습니다.</p></div>
             <ExampleBrowser compact />
         </div></section>
         <section className="page-shell py-14 sm:py-20" aria-labelledby="availability-title">
