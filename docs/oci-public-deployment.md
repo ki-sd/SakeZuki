@@ -55,6 +55,7 @@
 아래는 운영자 실행 절차이며 이번 개발 과정에서 운영 DB에 실행하지 않았다. Compose 파일 집합과 기존 프로젝트 이름을 먼저 확인한다. 비밀값을 터미널에 출력하지 않고 백업 파일은 외부 공개 경로와 Git 밖에 보관한다.
 
 ```bash
+set -e
 umask 077
 docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --routines --triggers --events --databases "$MYSQL_DATABASE"' > sakezuki-backup.sql
 test -s sakezuki-backup.sql
