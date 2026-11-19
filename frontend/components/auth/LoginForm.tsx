@@ -26,7 +26,7 @@ export default function LoginForm({ returnTo, oauthError }: { returnTo: string |
         // This route belongs to Spring Security and requires a full browser navigation.
         window.location.assign(new URL("/oauth2/authorization/google", window.location.origin).href);
     }
-    return <><Header /><main className="page-shell py-12 sm:py-20">
+    return <><Header /><main id="main-content" className="page-shell py-12 sm:py-20">
         <section className="ui-panel mx-auto max-w-md p-6 sm:p-9" aria-labelledby="login-title">
             <p className="text-xs font-medium tracking-widest text-stone-500">SAKEZUKI</p>
             <h1 id="login-title" className="mt-3 text-3xl font-semibold">로그인</h1>

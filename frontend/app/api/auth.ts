@@ -137,7 +137,7 @@ api.interceptors.response.use(response => response, async error => {
     if (config.headers.Authorization === `Bearer ${accessToken}`) {
         try { await refresh(); }
         catch (refreshError) {
-            // These APIs are public; an expired login must not prevent browsing or pairing.
+            // 무료 탐색·고정 예시는 로그인 만료 뒤에도 허용한다. 유료 추천은 이 경로에 포함하지 않는다.
             if (/^\/(sake|examples)(\/|$)/.test(config.url ?? "")) {
                 delete config.headers.Authorization;
                 return api(config);

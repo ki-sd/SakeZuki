@@ -35,6 +35,7 @@ jobs:
           npm run test:auth
           npx tsc --noEmit
           npm run lint
+          npm audit --audit-level=low
           npm run build
       - name: 분리 MySQL·전체 백엔드·Chromium 검증
         run: python3 scripts/test_auth_integration.py --e2e

@@ -10,6 +10,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,8 +39,16 @@ def main():
         subprocess.run(compose + ["up", "-d", "--wait"], env=env, cwd=ROOT, check=True)
         # 저장소 wrapper의 실행 비트와 관계없이 Linux에서도 동일한 검증을 실행한다.
         wrapper = [str(ROOT / "backend" / "gradlew.bat")] if os.name == "nt" else ["bash", str(ROOT / "backend" / "gradlew")]
-        gradle = wrapper + ["test", "authIntegrationTest", "--no-daemon"]
+        gradle = wrapper + ["cleanTest", "cleanAuthIntegrationTest", "test", "authIntegrationTest", "--no-daemon"]
         result = subprocess.run(gradle, env=env, cwd=ROOT / "backend")
+        # 실행된 XML 결과를 집계한다. 과거 보고서의 통과 수를 이번 검증으로 재사용하지 않는다.
+        for task in ["test", "authIntegrationTest"]:
+            reports = list((ROOT / "backend/build/test-results" / task).glob("TEST-*.xml"))
+            suites = [ET.parse(report).getroot() for report in reports]
+            counts = {key: sum(int(suite.get(key, "0")) for suite in suites) for key in ["tests", "failures", "errors", "skipped"]}
+            print(f"{task}: {counts}", flush=True)
+            if result.returncode == 0 and (not reports or counts["skipped"]):
+                raise RuntimeError("Required backend tests were missing or skipped")
         if result.returncode or not args.e2e:
             return result.returncode
         subprocess.run(wrapper + ["authE2eClasspath", "--no-daemon"], env=env, cwd=ROOT / "backend", check=True)

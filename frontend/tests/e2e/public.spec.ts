@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 
 test("public landing and both editorial pairing directions work without paid requests", async ({ page }) => {
     const paid: string[] = [];
@@ -48,6 +49,13 @@ test("duplicate warning offers free history before an explicitly paid new reques
     await page.getByLabel("비밀번호", { exact: true }).fill(process.env.AUTH_TEST_LOGIN_PASSWORD!);
     await page.getByRole("button", { name: "이메일로 로그인" }).click();
     await expect(page.getByRole("button", { name: "로그아웃", exact: true })).toBeVisible();
+    // 다른 테스트 실행 순서에 기대지 않고 이 사용자의 기존 기록을 독립적으로 만든다.
+    const csrf = await (await page.request.get("/api/auth/csrf")).json();
+    const tokens = await page.request.post("/api/auth/refresh", { headers: { [csrf.headerName]: csrf.token } });
+    expect(tokens.status()).toBe(200);
+    const token = (await tokens.json()).accessToken;
+    const original = await page.request.post("/api/recommend/sake", { headers: { Authorization: `Bearer ${token}`, "Idempotency-Key": randomUUID() }, data: { food: process.env.AUTH_TEST_FOOD! } });
+    expect(original.status()).toBe(200);
     const paid: string[] = [];
     page.on("request", request => { if (new URL(request.url()).pathname === "/api/recommend/sake") paid.push(request.headers()["idempotency-key"]); });
     await page.goto("/recommend");
