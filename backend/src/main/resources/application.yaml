@@ -50,6 +50,8 @@ mybatis:
 
 server:
   port: 8080
+  # 외부 포트를 열지 않은 Compose 네트워크에서 Nginx가 덮어쓴 헤더만 신뢰한다.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
   servlet:
     session:
       timeout: 10m
@@ -70,4 +72,18 @@ auth:
 
 logging:
   level:
-    com.zaxxer.hikari: DEBUG
+    com.zaxxer.hikari: INFO
+
+credits:
+  initial-grant: ${CREDITS_INITIAL_GRANT:10}
+  history-retention: ${CREDITS_HISTORY_RETENTION:30d}
+  reservation-timeout: ${CREDITS_RESERVATION_TIMEOUT:10m}
+  daily-generation-limit: ${CREDITS_DAILY_GENERATION_LIMIT:100}
+
+identity:
+  hash-key: ${IDENTITY_HASH_KEY:}
+  terms-version: ${IDENTITY_TERMS_VERSION:}
+  privacy-version: ${IDENTITY_PRIVACY_VERSION:}
+  terms-url: ${IDENTITY_TERMS_URL:}
+  privacy-url: ${IDENTITY_PRIVACY_URL:}
+  provider-origin: ${IDENTITY_PROVIDER_ORIGIN:}

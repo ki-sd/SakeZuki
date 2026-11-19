@@ -30,7 +30,7 @@ function setup(pathname = "/sake") {
     const source = fs.readFileSync(new URL("../app/api/auth.ts", import.meta.url), "utf8");
     const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
     vm.runInNewContext(compiled, {
-        exports, navigator: {}, window: { location: { pathname } }, sessionStorage: { getItem: () => null, removeItem() {} },
+        exports, URL, navigator: {}, window: { location: { pathname } }, sessionStorage: { getItem: () => null, removeItem() {} },
         require(name) { if (name === "axios") return axios; if (name === "./axios") return api; throw new Error(name); },
     });
     return { auth: exports, calls, request: config => requestInterceptor(config), response: error => responseInterceptor(error), failRefresh() { failRefresh = true; } };
@@ -90,7 +90,7 @@ test("expired refresh logs out but public sake requests can still succeed", asyn
 
 test("return destinations reject external URLs and authentication loops", () => {
     const { auth } = setup();
-    for (const value of ["https://evil.example", "//evil.example", "/\\evil.example", "/login", null])
+    for (const value of ["https://evil.example", "//evil.example", "/\\evil.example", "/login", "/a/../login", "/login/", "/%5c%5cevil.example", "/%2f%2fevil.example", null])
         assert.equal(auth.safeReturnTo(value), "/sake");
     assert.equal(auth.safeReturnTo("/account?tab=profile"), "/account?tab=profile");
 });

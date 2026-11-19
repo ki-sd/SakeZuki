@@ -37,6 +37,7 @@ services:
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
+      FORWARD_HEADERS_STRATEGY: framework
 
     depends_on:
       # 애플리케이션이 DB 시작 도중 연결을 시도하지 않도록 건강 상태를 기다린다.
@@ -64,7 +65,9 @@ services:
       - "80:80"
 
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/policies.conf:/etc/nginx/sakezuki/policies.conf:ro
+      - ./nginx/server.conf:/etc/nginx/sakezuki/server.conf:ro
 
     depends_on:
       - frontend

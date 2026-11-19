@@ -20,7 +20,17 @@ import java.util.Map;
 public class AuthController {
     private final AuthService aService;
     private final AuthProperties properties;
+    private final com.sakezuki.backend.identity.IdentityProperties identityPolicy;
     private static final String REFRESH_COOKIE = "sakezuki_refresh";
+
+    @GetMapping("/signup-policy")
+    public ResponseEntity<?> signupPolicy() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                "termsVersion", identityPolicy.getTermsVersion(), "privacyVersion", identityPolicy.getPrivacyVersion(),
+                "termsUrl", identityPolicy.getTermsUrl(), "privacyUrl", identityPolicy.getPrivacyUrl(),
+                "enabled", !identityPolicy.getTermsVersion().isBlank() && !identityPolicy.getPrivacyVersion().isBlank()
+                        && !identityPolicy.getTermsUrl().isBlank() && !identityPolicy.getPrivacyUrl().isBlank()));
+    }
 
     @GetMapping("/csrf")
     public Map<String, String> csrf(CsrfToken token, HttpServletResponse response) {

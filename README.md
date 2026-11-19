@@ -10,6 +10,18 @@ SakeZuki는 사케의 기본 정보와 브랜드·양조장 정보를 탐색하�
 
 ---
 
+## 현재 인증·크레딧 및 공개 배포 상태
+
+Google OIDC와 이메일 로그인, 메모리 Access Token 및 HttpOnly Refresh 쿠키를 사용합니다. 신규 소셜 계정은 승인된 약관 동의 후 추가정보를 저장하며, 본인확인·성인확인 전에는 정식 추천 이용 상태로 전환되지 않습니다. 기존 회원과 사케 데이터는 유지합니다.
+
+- 사케 목록·검색·상세는 무료입니다. 새로운 AI 추천은 인증된 본인확인 회원만 이용하며, 공용 캐시 적중 여부와 관계없이 1크레딧을 사용합니다.
+- 최초 확인 회원에게 기본 10크레딧을 한 번 지급합니다. 같은 멱등성 키 재시도와 최근 30일 기록 재열람은 추가 차감하지 않습니다. 실패 예약은 원장과 함께 복구합니다.
+- `/account`에서 잔액·확인 상태·추천 스냅샷·최근 크레딧 거래를 조회합니다.
+- 실제 본인확인 사업자 및 PG는 미연동입니다. 성공하는 운영 Mock은 없으며 약관 설정이 비어 있으면 신규 가입도 닫힙니다. Google 기존 회원 재로그인과 무료 탐색은 유지됩니다.
+- HTTPS·쿠키·Google redirect·CORS는 동일한 공개 출처를 사용하도록 Compose override로 준비했습니다. 실제 OCI 운영 배포는 수행하지 않았습니다.
+
+설계·실행 결과·남은 위험은 [2026-11-19 검증 보고서](docs/security-credits-validation-2026-11-19.md), 설정·사업자 계약·법령 검토 범위는 [OCI 공개 배포 준비](docs/oci-public-deployment.md)를 확인하세요. 아래 초기 개발·AWS 배포 기록은 당시 이력입니다.
+
 ## Project Overview
 
 | 항목 | 내용                                                               |
@@ -17,8 +29,8 @@ SakeZuki는 사케의 기본 정보와 브랜드·양조장 정보를 탐색하�
 | 개발 기간 | 2026.09                                                          |
 | 개발 인원 | 1명                                                               |
 | 역할 | 기획 · 설계 · Backend · Frontend · 데이터 구축 · 배포                       |
-| Backend | Java 21 · Spring Boot 4.1.1 · Spring AI 2.0.1 · MyBatis · Flyway |
-| Frontend | Next.js 16.3.5 · React 19 · TypeScript · TanStack Query · Axios · Tailwind CSS |
+| Backend | Java 21 · Spring Boot 4.1.2 · Spring AI 2.0.1 · MyBatis · Flyway |
+| Frontend | Next.js 16.4.6 · React 19 · TypeScript · TanStack Query · Axios · Tailwind CSS |
 | Database | MySQL 8.4                                                        |
 | AI | Google Gemini                                                    |
 | Infrastructure | Docker Compose · Nginx · AWS EC2                                 |

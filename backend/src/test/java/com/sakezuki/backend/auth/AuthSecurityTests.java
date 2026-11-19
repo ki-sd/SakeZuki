@@ -45,6 +45,8 @@ class AuthSecurityTests {
         context.register(Beans.class, SecurityConfig.class, JwtConfig.class, JwtTokenProvider.class,
                 AuthController.class, MemberController.class, ControllerException.class, AdminController.class);
         context.refresh();
+        var member = new com.sakezuki.backend.member.vo.MemberVO(); member.setStatus("ACTIVE");
+        when(context.getBean(MemberService.class).getLoginData(1L)).thenReturn(member);
         mvc = MockMvcBuilders.webAppContextSetup(context)
                 .addFilters(context.getBean("springSecurityFilterChain", jakarta.servlet.Filter.class)).build();
     }
@@ -57,6 +59,7 @@ class AuthSecurityTests {
             p.setAccessTokenExpiration(Duration.ofMinutes(15)); return p;
         }
         @Bean AuthService authService() { return mock(AuthService.class); }
+        @Bean com.sakezuki.backend.identity.IdentityProperties identityPolicy() { return new com.sakezuki.backend.identity.IdentityProperties(); }
         @Bean MemberService memberService() { return mock(MemberService.class); }
         @Bean CustomOidcUserService oidcUserService() { return mock(CustomOidcUserService.class); }
         @Bean OAuth2LoginSuccessHandler success(MemberService members, AuthProperties p) { return new OAuth2LoginSuccessHandler(members, p); }
@@ -111,7 +114,8 @@ class AuthSecurityTests {
 
     @Test void expiredJwtFailsValidation() {
         var claims = org.springframework.security.oauth2.jwt.JwtClaimsSet.builder().issuer("sakezuki")
-                .subject("1").issuedAt(Instant.now().minusSeconds(600)).expiresAt(Instant.now().minusSeconds(300)).build();
+                .subject("1").issuedAt(Instant.now().minusSeconds(600)).expiresAt(Instant.now().minusSeconds(300))
+                .claim("roles", List.of("ROLE_USER")).build();
         String token = context.getBean(org.springframework.security.oauth2.jwt.JwtEncoder.class).encode(
                 org.springframework.security.oauth2.jwt.JwtEncoderParameters.from(
                         org.springframework.security.oauth2.jwt.JwsHeader.with(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256).build(), claims)).getTokenValue();
@@ -125,6 +129,20 @@ class AuthSecurityTests {
         session.setAttribute("SPRING_SECURITY_CONTEXT", new org.springframework.security.core.context.SecurityContextImpl(auth));
         mvc.perform(get("/api/user/me").session(session)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/admin/ping").session(session)).andExpect(status().isUnauthorized());
+    }
+
+    @Test void signedJwtStillRequiresExpectedIssuerExpirySubjectAndRoles() {
+        for (int variant=0;variant<4;variant++) {
+            var claims=org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
+                    .issuer(variant==0?"other-service":"sakezuki").subject(variant==1?"not-a-member":"1")
+                    .issuedAt(Instant.now());
+            if(variant!=2)claims.expiresAt(Instant.now().plusSeconds(600));
+            claims.claim("roles",List.of(variant==3?"ROLE_ROOT":"ROLE_USER"));
+            String token=context.getBean(org.springframework.security.oauth2.jwt.JwtEncoder.class).encode(
+                    org.springframework.security.oauth2.jwt.JwtEncoderParameters.from(
+                            org.springframework.security.oauth2.jwt.JwsHeader.with(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256).build(),claims.build())).getTokenValue();
+            assertThrows(JwtException.class,()->context.getBean(JwtDecoder.class).decode(token));
+        }
     }
 
     @Test void socialTokenExchangeIsOneTimeAndRefreshLogoutUseCookies() throws Exception {

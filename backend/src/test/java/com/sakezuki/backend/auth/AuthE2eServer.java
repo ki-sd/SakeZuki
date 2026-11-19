@@ -37,6 +37,15 @@ public class AuthE2eServer {
                 context.getBean(PasswordEncoder.class).encode(password), "E2E test", "Test address", "e2e-" + java.util.UUID.randomUUID().toString().substring(0, 12));
         Long no = db.queryForObject("SELECT no FROM MEMBER WHERE email=?", Long.class, email);
         db.update("INSERT INTO MEMBER_AUTHORITY(member_no,authority) VALUES(?, 'ROLE_USER')", no);
+        // 브라우저 과금 검증에만 쓰는 합성 본인확인 결과다. 운영 JAR에는 이 진입점이 포함되지 않는다.
+        long now=java.time.Instant.now().getEpochSecond();
+        db.update("INSERT INTO MEMBER_VERIFICATION VALUES(?,'e2e','e2e',?,?,TRUE)",no,now,now);
+        db.update("INSERT INTO CREDIT_ACCOUNT VALUES(?,10)",no);
+        db.update("INSERT INTO CREDIT_LEDGER(member_no,reference_id,kind,delta,balance_after,created_at_epoch) VALUES(?,'INITIAL','GRANT',10,10,?)",no,now);
+        var sakeNos=db.queryForList("SELECT no FROM SAKE ORDER BY no LIMIT 3",Long.class);
+        String food="E2E pairing "+java.util.UUID.randomUUID();
+        for(Long sake:sakeNos)db.update("INSERT INTO RECOMMEND_SAKE(food,sake_no,reason) VALUES(?,?,?)",food,sake,"E2E 당시 추천 이유");
+        System.out.println("AUTH_E2E_FOOD="+food);
         System.out.println("AUTH_E2E_READY");
     }
 }

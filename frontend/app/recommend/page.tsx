@@ -4,13 +4,16 @@
 import {Suspense,useState} from "react";
 import Link from "next/link";
 import {useSearchParams} from "next/navigation";
-import {useMutation,useQuery} from "@tanstack/react-query";
+import {useMutation,useQuery,useQueryClient} from "@tanstack/react-query";
 import {recommendFood,recommendSake} from "@/app/api/recommend";
 import {getSakeDetail,searchSake} from "@/app/api/sake";
 import type {SakeSearchItem} from "@/types/sake";
 import Header from "@/components/layout/Header";
 import SakeImage from "@/components/sake/SakeImage";
 import {getSakeTypeLabel} from "@/commons/sake";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { getAccount } from "@/app/api/account";
+import { errorMessage } from "@/app/api/auth";
 
 // 화면의 두 추천 방향만 허용해 모드별 입력과 결과 렌더링이 같은 기준을 쓰게 한다.
 type RecommendMode="sake" | "food";
@@ -25,6 +28,11 @@ export default function RecommendPage(){
 }
 
 function RecommendContent(){
+    const auth = useAuth();
+    const queryClient = useQueryClient();
+    const account = useQuery({ queryKey: ["account", auth.member?.memberNo], queryFn: getAccount, enabled: auth.status === "authenticated", retry: false });
+    // 잔액이 0이어도 응답이 유실된 마지막 요청을 같은 키로 확인할 수 있어야 한다.
+    const allowed = account.data?.verified;
     // 상세 페이지에서 ?sakeNo=...로 들어오면 이미 고른 제품을 이어받아 음식 추천 모드로 연다.
 	const searchParams=useSearchParams();
 	const sakeNoParam=searchParams.get("sakeNo");
@@ -68,11 +76,13 @@ function RecommendContent(){
     // 추천은 사용자가 버튼을 눌렀을 때 시작하는 POST 작업이라 useMutation으로 대기·실패·성공을 관리한다.
     // 서버의 DB 영속 캐시와 별개로, 여기서는 현재 요청의 화면 상태를 다룬다.
 	const sakeMutation=useMutation({
-		mutationFn:recommendSake
+		mutationFn:recommendSake,
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["account", auth.member?.memberNo] })
 	});
 
 	const foodMutation=useMutation({
-		mutationFn:recommendFood
+		mutationFn:recommendFood,
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["account", auth.member?.memberNo] })
 	});
 
     // 입력 문자열이 캐시 키가 되고 30초 동안 같은 검색어의 결과를 재사용한다.
@@ -88,7 +98,7 @@ function RecommendContent(){
 	const handleSakeRecommend=()=>{
 		const value=food.trim();
 
-		if(!value || sakeMutation.isPending){
+        if(!allowed || !value || sakeMutation.isPending){
 			return;
 		}
 
@@ -99,7 +109,7 @@ function RecommendContent(){
 
     // 표시된 문자열이 아니라 DB에서 선택한 sakeNo를 보내 제품 식별을 확정한다.
 	const handleFoodRecommend=()=>{
-		if(!currentSake || foodMutation.isPending){
+        if(!allowed || !currentSake || foodMutation.isPending){
 			return;
 		}
 
@@ -130,7 +140,13 @@ function RecommendContent(){
 		<>
 			<Header/>
 
-			<main className={"page-shell pb-16 pt-8 sm:pt-10"}>
+            <main className={"page-shell pb-16 pt-8 sm:pt-10"}>
+                <div className="ui-panel mb-6 p-4 text-sm">
+                    <p>추천 1회당 1크레딧 · 이전 기록 다시 보기는 무료</p>
+                    <p className="mt-2">{auth.status !== "authenticated" ? "로그인 후 본인확인을 완료하면 추천을 이용할 수 있습니다." : !account.data?.verified ? "본인확인 서비스 연결을 준비 중입니다. 내 계정에서 진행 상태를 확인해 주세요." : `잔여 크레딧 ${account.data.balance}개`}</p>
+                    <Link href="/account" className="mt-2 inline-block underline">내 계정 · 크레딧 · 추천 기록</Link>
+                    {(sakeMutation.isError || foodMutation.isError) && <p role="alert" className="mt-2 text-red-700">{errorMessage(sakeMutation.error || foodMutation.error)}</p>}
+                </div>
 				<section className={"mb-7"}>
 					<h1 className={"text-2xl font-semibold tracking-tight text-stone-900"}>
 						음식 페어링
@@ -181,7 +197,7 @@ function RecommendContent(){
 								/>
 
 								<button type={"button"} onClick={handleSakeRecommend}
-										disabled={!food.trim() || sakeMutation.isPending}
+										disabled={!allowed || !food.trim() || sakeMutation.isPending}
 										 className={"ui-button w-full sm:w-auto"}>
 									{sakeMutation.isPending ? "추천 중..." : "추천받기"}
 								</button>
@@ -372,7 +388,7 @@ function RecommendContent(){
 										</div>
 
 										<button type={"button"} onClick={handleFoodRecommend}
-												disabled={!currentSake || foodMutation.isPending}
+											disabled={!allowed || !currentSake || foodMutation.isPending}
 												className={"ui-button w-full sm:w-auto"}>
 											{foodMutation.isPending ? "추천 중..." : "추천받기"}
 										</button>

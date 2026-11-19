@@ -16,19 +16,27 @@ public class RecommendServiceImpl implements RecommendService {
     private final RecommendMapper rMapper;
     private final SakeService sService;
     private final GeminiRecommendService gService;
+    private final GenerationGuard generationGuard;
 
     // 같은 sakeNo의 추천을 먼저 DB에서 찾는다. 이미 생성된 결과가 있으면 Gemini 호출을 건너뛴다.
     @Override
     public FoodRecommendResponse foodRecommendList(Long sakeNo) {
+        if (sakeNo == null || sakeNo < 1) throw new IllegalArgumentException("사케를 선택해 주세요.");
         List<RecommendedFoodResponse> recommends=rMapper.getFoodRecommendList(sakeNo);
         if(recommends.isEmpty()){
+            recommends=generationGuard.generate(() -> {
+                var cached = rMapper.getFoodRecommendList(sakeNo);
+                return cached.isEmpty() ? null : cached;
+            }, () -> {
             SakeDetailResponse sake=sService.getSakeDetail(sakeNo);
             // DB의 실제 상세 정보를 AI에 전달해 제품 고유 사실을 임의로 만들지 않도록 한다.
             // AI 호출
-            recommends=gService.recommendFood(sake);
+            var generated=gService.recommendFood(sake);
             // 첫 요청의 결과를 저장해 다음 요청은 같은 음식 추천을 재사용한다.
             // DB 저장
-            rMapper.insertFoodRecommend(sakeNo,recommends);
+            rMapper.insertFoodRecommend(sakeNo,generated);
+            return generated;
+            });
         }
         return FoodRecommendResponse.builder()
                 .sakeNo(sakeNo)
@@ -39,7 +47,7 @@ public class RecommendServiceImpl implements RecommendService {
     // 음식명은 공백만 정리해 캐시 키로 쓰며, 최초 요청에서만 분석→DB 후보→재선정을 수행한다.
     @Override
     public SakeRecommendResponse sakeRecommendList(String food){
-        if(food==null || food.isBlank()){
+        if(food==null || food.isBlank() || food.trim().length()>200){
             throw new IllegalArgumentException("음식명이 비어있습니다.");
         }
 
@@ -47,15 +55,19 @@ public class RecommendServiceImpl implements RecommendService {
 
         List<RecommendedSakeResponse> recommendations=rMapper.getSakeRecommendList(normalizedFood);
 
-        log.info("기존 사케 추천 조회: food={}, count={}",normalizedFood,recommendations.size());
+        log.info("기존 사케 추천 조회: count={}",recommendations.size());
 
         if(recommendations.isEmpty()){
+            recommendations=generationGuard.generate(() -> {
+                var cached = rMapper.getSakeRecommendList(normalizedFood);
+                return cached.isEmpty() ? null : cached;
+            }, () -> {
             // Gemini는 후보 검색 조건을 만들고, 실제 후보 제품은 MyBatis가 DB에서 가져온다.
             SakeRecommendCondition condition=gService.analyzeFood(normalizedFood);
 
             List<SakeRecommendCandidate> candidates=rMapper.getSakeRecommendCandidates(condition);
 
-            log.info("사케 추천 후보 조회: food={}, count={}",normalizedFood,candidates.size());
+            log.info("사케 추천 후보 조회: count={}",candidates.size());
 
             if(candidates.isEmpty()){
                 throw new IllegalStateException("추천 가능한 사케 후보가 없습니다.");
@@ -64,13 +76,12 @@ public class RecommendServiceImpl implements RecommendService {
             // 후보 안에서 고른 식별자와 추천 이유만 저장한다. 응답의 제품 정보는 다시 DB에서 읽는다.
             List<SakeRerankItem> rerankItems=gService.rerankSake(normalizedFood,condition,candidates);
 
-            log.info("Gemini 재선정 결과: food={}, count={}",normalizedFood,rerankItems.size());
+            log.info("Gemini 재선정 결과: count={}",rerankItems.size());
 
             rMapper.insertSakeRecommend(normalizedFood,rerankItems);
 
-            recommendations=rMapper.getSakeRecommendList(normalizedFood);
-
-            log.info("사케 추천 저장 후 조회: food={}, count={}",normalizedFood,recommendations.size());
+            return rMapper.getSakeRecommendList(normalizedFood);
+            });
         }
 
         if(recommendations.size()!=3){

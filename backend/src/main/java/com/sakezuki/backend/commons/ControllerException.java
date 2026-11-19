@@ -46,19 +46,19 @@ public class ControllerException {
     // 400
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> illegalArgumentException(IllegalArgumentException e){
-        log.warn("잘못된 요청: {}",e.getMessage());
+        log.warn("잘못된 요청: 입력값 확인 필요");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
     }
     // 401
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<String> badCredentialsException(BadCredentialsException e){
-        log.warn("로그인 실패: 아이디나 비밀번호가 잘못되었습니다 : {}",e.getMessage());
+        log.warn("로그인 실패: 자격증명 확인 필요");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("아이디나 비밀번호가 잘못되었습니다.");
     }
     // 404
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<String> noResourceFoundException(NoResourceFoundException e){
-        log.warn("요청한 페이지를 찾을 수 없습니다: {}",e.getMessage());
+        log.warn("요청한 페이지를 찾을 수 없습니다.");
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body("요청한 페이지를 찾을 수 없습니다.");
     }
     // 405
@@ -70,7 +70,8 @@ public class ControllerException {
     // 500
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> exception(Exception e){
-        log.error("알수없는 오류 발생",e);
+        // 외부 사업자·SQL 예외에는 요청 본문이나 식별정보가 포함될 수 있어 클래스명만 기록한다.
+        log.error("요청 처리 실패: {}",e.getClass().getSimpleName());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("알 수 없는 오류가 발생했습니다.");
     }
 }
