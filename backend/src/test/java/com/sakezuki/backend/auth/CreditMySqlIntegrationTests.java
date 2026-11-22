@@ -175,6 +175,50 @@ class CreditMySqlIntegrationTests {
         return tokens.createAccessToken(new com.sakezuki.backend.security.CustomUserDetails(no,"test@example.invalid",null,
                 List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER"))));
     }
+    @Test void duplicateLookupUsesOwnedNewestUnexpiredSnapshotWithoutCharging() throws Exception {
+        verify(member,UUID.randomUUID().toString());
+        String food="match-"+UUID.randomUUID();
+        for(Long sake:db.queryForList("SELECT no FROM SAKE ORDER BY no LIMIT 3",Long.class))
+            db.update("INSERT INTO RECOMMEND_SAKE(food,sake_no,reason) VALUES(?,?,?)",food,sake,"matching snapshot");
+        String firstKey=UUID.randomUUID().toString(),secondKey=UUID.randomUUID().toString();
+        paid.recommend(member,firstKey,"SAKE",food,null);
+        paid.recommend(member,secondKey,"SAKE",food,null);
+        var first=mapper.byKey(member,firstKey);var second=mapper.byKey(member,secondKey);
+        // 초 단위 완료 시각이 같아도 원장의 확정 순서로 가장 최근 요청을 선택한다.
+        db.update("UPDATE RECOMMEND_REQUEST SET completed_at_epoch=? WHERE id IN (?,?)",Instant.now().getEpochSecond(),first.id(),second.id());
+        String condition="{\"kind\":\"SAKE\",\"food\":\"  "+food+"  \"}";
+        var match=http("/api/user/recommendations/match",member,null,condition);
+        assertEquals(200,match.statusCode());assertTrue(match.body().contains(second.id()));
+        assertTrue(match.headers().firstValue("Cache-Control").orElse("").contains("no-store"));
+        assertEquals(8,mapper.balance(member));
+        assertEquals(4,db.queryForObject("SELECT COUNT(*) FROM CREDIT_LEDGER WHERE member_no=? AND kind IN ('RESERVE','COMMIT')",Integer.class,member));
+        assertEquals("{\"match\":null}",http("/api/user/recommendations/match",member(),null,condition).body());
+        assertEquals("{\"match\":null}",http("/api/user/recommendations/match",member,null,condition.replace(food,food.toUpperCase(Locale.ROOT))).body());
+        assertEquals(400,http("/api/user/recommendations/match",member,null,"{\"kind\":\"FOOD\",\"sakeNo\":0}").statusCode());
+        assertEquals(401,http("/api/user/recommendations/match",null,null,condition).statusCode());
+        var detail=http("/api/user/recommendations/"+second.id(),member,null,null);
+        assertEquals(200,detail.statusCode());assertEquals(second.resultSnapshot(),detail.body());
+        assertTrue(detail.headers().firstValue("X-Recommendation-Expires-At").isPresent());assertEquals(8,mapper.balance(member));
+        db.update("UPDATE RECOMMEND_REQUEST SET expires_at_epoch=0 WHERE id=?",second.id());
+        assertTrue(http("/api/user/recommendations/match",member,null,condition).body().contains(first.id()));
+        assertEquals(410,http("/api/user/recommendations/"+second.id(),member,null,null).statusCode());
+        db.update("UPDATE RECOMMEND_REQUEST SET result_snapshot=NULL WHERE id=?",first.id());
+        assertEquals("{\"match\":null}",http("/api/user/recommendations/match",member,null,condition).body());
+        verifyNoInteractions(gemini);
+    }
+    @Test void sakeConditionMatchingUsesProductNumberAndNeverFindsReservedOrFailedRequests() {
+        verify(member,UUID.randomUUID().toString());
+        var condition=com.sakezuki.backend.recommend.RecommendationCondition.of("FOOD",null,4L);
+        var request=transactions.reserve(member,UUID.randomUUID().toString(),condition.hash(),"FOOD","4").request();
+        assertNull(mapper.latestMatching(member,condition.hash(),Instant.now().getEpochSecond()));
+        transactions.complete(member,request.id(),"{\"sake\":{\"nameKo\":\"test product\"},\"foods\":[]}");
+        var found=mapper.latestMatching(member,condition.hash(),Instant.now().getEpochSecond());
+        assertEquals(request.id(),found.id());assertEquals("test product",found.inputLabel());
+        assertNull(mapper.latestMatching(member,com.sakezuki.backend.recommend.RecommendationCondition.of("FOOD",null,5L).hash(),Instant.now().getEpochSecond()));
+        var failed=transactions.reserve(member,UUID.randomUUID().toString(),"failed-condition","FOOD","5").request();
+        transactions.refund(member,failed.id(),false);
+        assertNull(mapper.latestMatching(member,"failed-condition",Instant.now().getEpochSecond()));
+    }
     java.net.http.HttpResponse<String> http(String path, Long no, String key, String body) throws Exception {
         var builder=java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:"+port+path));
         if(no!=null)builder.header("Authorization","Bearer "+bearer(no));

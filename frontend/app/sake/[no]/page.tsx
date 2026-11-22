@@ -37,7 +37,7 @@ export default function SakeDetailPage(){
         return (
             <>
                 <Header/>
-                <main className={"page-shell py-10"}>
+                <main id="main-content" className={"page-shell py-10"}>
                     <div className={"ui-panel grid animate-pulse gap-6 p-5 sm:grid-cols-[minmax(0,280px)_1fr]"} aria-label={"사케 정보 불러오는 중"}>
                         <div className={"aspect-4/5 rounded bg-stone-100"}/>
                         <div className={"space-y-4 py-4"}><div className={"h-6 w-2/3 rounded bg-stone-100"}/><div className={"h-4 w-1/2 rounded bg-stone-100"}/></div>
@@ -50,7 +50,7 @@ export default function SakeDetailPage(){
         return (
             <>
                 <Header/>
-                <main className={"page-shell py-10"}>
+                <main id="main-content" className={"page-shell py-10"}>
                     <div className={"ui-state"}>정보를 불러오지 못했습니다.</div>
                 </main>
             </>
@@ -60,7 +60,7 @@ export default function SakeDetailPage(){
         <>
             <Header/>
 
-            <main className={"page-shell pb-16 pt-7 sm:pt-9"}>
+            <main id="main-content" className={"page-shell pb-16 pt-7 sm:pt-9"}>
                 <Link href="/sake"
                     className={"mb-6 inline-flex items-center gap-2 rounded-sm text-sm font-medium text-stone-500 transition hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
                     <span>←</span>
