@@ -29,11 +29,14 @@ public class AuthServiceImpl implements AuthService {
     private final MemberService mService;
     private final CustomUserDetailsService userDetailsService;
     private final RefreshTokenService refreshTokens;
+    private final com.sakezuki.backend.identity.IdentityProperties identityPolicy;
+    private final com.sakezuki.backend.identity.IdentityTransactions verification;
 
     @Override
     public LoginResponseDTO login(LoginRequestDTO dto) {
         if (dto.getEmail() == null || dto.getEmail().isBlank() || dto.getEmail().length() > 255
-                || dto.getPassword() == null || dto.getPassword().isBlank() || dto.getPassword().length() > 200)
+                || dto.getPassword() == null || dto.getPassword().isBlank()
+                || dto.getPassword().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
             throw new IllegalArgumentException("이메일과 비밀번호를 확인해 주세요.");
         Authentication authentication= UsernamePasswordAuthenticationToken.unauthenticated(
                 dto.getEmail(),dto.getPassword()
@@ -56,6 +59,12 @@ public class AuthServiceImpl implements AuthService {
                 || (dto.getAddress2() != null && dto.getAddress2().length() > 1000)
                 || dto.getPhone() == null || dto.getPhone().length() > 20 || !phone.matches("\\+?[0-9]{7,15}"))
             throw new IllegalArgumentException("주소와 전화번호를 확인해 주세요.");
+        // 개인정보를 추가 저장하기 전에 현재 승인된 약관 동의를 확인한다. 빈 설정은 가입을 허용하지 않는다.
+        if (identityPolicy.getTermsVersion().isBlank() || identityPolicy.getPrivacyVersion().isBlank()
+                || identityPolicy.getTermsUrl().isBlank() || identityPolicy.getPrivacyUrl().isBlank())
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "회원가입 약관을 준비 중입니다.");
+        if (!identityPolicy.getTermsVersion().equals(dto.getTermsVersion()) || !identityPolicy.getPrivacyVersion().equals(dto.getPrivacyVersion()))
+            throw new IllegalArgumentException("현재 이용약관과 개인정보 처리방침에 동의해 주세요.");
         if (mService.findSocialAccount(signupInfo.getProvider(), signupInfo.getProviderUserId()) != null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 가입된 소셜 계정입니다. 다시 로그인해 주세요.");
         MemberVO existingMember=mService.getLoginData(signupInfo.getEmail());
@@ -74,6 +83,7 @@ public class AuthServiceImpl implements AuthService {
         newSocialAccount.setProviderUserId(signupInfo.getProviderUserId());
 
         mService.createSocialMember(member,newSocialAccount);
+        verification.consent(member.getNo(), dto.getTermsVersion(), dto.getPrivacyVersion());
 
         CustomUserDetails userDetails=(CustomUserDetails) userDetailsService.loadUserByUsername(member.getEmail());
         return issue(userDetails);

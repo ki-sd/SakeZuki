@@ -53,7 +53,8 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain apiChain(HttpSecurity http, JwtAuthenticationConverter converter) throws Exception {
+    public SecurityFilterChain apiChain(HttpSecurity http, JwtAuthenticationConverter converter,
+                                        com.sakezuki.backend.member.service.MemberService members) throws Exception {
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .securityContext(context -> context.securityContextRepository(new NullSecurityContextRepository()))
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
@@ -64,7 +65,8 @@ public class SecurityConfig {
                                 org.springframework.security.web.csrf.CsrfFilter.DEFAULT_CSRF_MATCHER,
                                 org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.withDefaults().matcher("/api/auth/**"))))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/sake/**", "/api/recommend/**", "/error").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/sake/**", "/api/health/ready", "/error").permitAll()
+                        .requestMatchers("/api/recommend/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().denyAll())
@@ -74,6 +76,8 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(converter))
                         .authenticationEntryPoint((request, response, error) -> jsonError(response, 401, "로그인이 만료되었습니다."))
                         .accessDeniedHandler((request, response, error) -> jsonError(response, 403, "접근 권한이 없습니다.")))
+                .addFilterAfter(new com.sakezuki.backend.security.ActiveMemberFilter(members),
+                        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .logout(logout -> logout.disable());
         return http.build();
     }

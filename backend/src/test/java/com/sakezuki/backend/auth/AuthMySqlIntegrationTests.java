@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.security.oauth2.client.registration.google.client-secret=integration-test",
         "spring.ai.google.genai.api-key=integration-test", "logging.level.com.zaxxer.hikari=INFO",
         "jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        ,"identity.terms-version=test-v1", "identity.privacy-version=test-v1", "identity.terms-url=/terms", "identity.privacy-url=/privacy"
 })
 class AuthMySqlIntegrationTests {
     @DynamicPropertySource static void database(DynamicPropertyRegistry properties) {
@@ -55,6 +56,9 @@ class AuthMySqlIntegrationTests {
     private final ObjectMapper json = new ObjectMapper();
     private Long memberNo;
     private String email;
+    private SocialSignupRequestDTO signup() {
+        var dto=new SocialSignupRequestDTO();dto.setTermsVersion("test-v1");dto.setPrivacyVersion("test-v1");return dto;
+    }
 
     @BeforeEach void fixture() {
         String id = UUID.randomUUID().toString();
@@ -90,7 +94,7 @@ class AuthMySqlIntegrationTests {
     }
 
     @Test void flywayV4AndActualTablesAreValid() {
-        assertEquals(4, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class));
+        assertEquals(5, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class));
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='4' AND success=1", Integer.class));
         assertNotNull(db.queryForList("SELECT token_hash,family_id,used FROM AUTH_REFRESH_TOKEN LIMIT 1"));
     }
@@ -148,7 +152,7 @@ class AuthMySqlIntegrationTests {
     @Test void socialSignupAndExistingIdentityUseRealMapperAndRejectDuplicates() {
         String unique = UUID.randomUUID().toString();
         var identity = new SocialSignupDTO("GOOGLE", unique, unique + "@example.invalid", "소셜테스트");
-        var dto = new SocialSignupRequestDTO(); dto.setAddress1("테스트 주소"); dto.setPhone("010" + String.format("%08d", Math.abs(unique.hashCode() % 100000000)));
+        var dto = signup(); dto.setAddress1("테스트 주소"); dto.setPhone("010" + String.format("%08d", Math.abs(unique.hashCode() % 100000000)));
         var result = auth.socialSignup(identity, dto);
         assertNotNull(result.getAccessToken());
         var social = members.findSocialAccount("GOOGLE", unique); assertNotNull(social);
@@ -161,7 +165,7 @@ class AuthMySqlIntegrationTests {
     }
 
     @Test void socialSignupRollsBackMemberAndAuthorityWhenPhoneCollides() {
-        var dto = new SocialSignupRequestDTO(); dto.setAddress1("테스트 주소"); dto.setPhone("01098765432");
+        var dto = signup(); dto.setAddress1("테스트 주소"); dto.setPhone(String.format("%011d", Math.abs(UUID.randomUUID().getLeastSignificantBits() % 100000000000L)));
         db.update("UPDATE MEMBER SET phone=? WHERE no=?", dto.getPhone(), memberNo);
         String candidate = UUID.randomUUID() + "@example.invalid";
         assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
@@ -172,7 +176,7 @@ class AuthMySqlIntegrationTests {
     @Test void concurrentSocialSignupCreatesOnlyOneCompleteMember() throws Exception {
         String id = UUID.randomUUID().toString();
         var info = new SocialSignupDTO("GOOGLE", id, id + "@example.invalid", "Concurrent signup");
-        var details = new SocialSignupRequestDTO(); details.setAddress1("Test address");
+        var details = signup(); details.setAddress1("Test address");
         details.setPhone(String.format("%011d", Math.abs(UUID.randomUUID().getLeastSignificantBits() % 100000000000L)));
         var gate = new CountDownLatch(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
@@ -213,7 +217,7 @@ class AuthMySqlIntegrationTests {
         var list = browser.get("/api/sake/list", null); assertEquals(200, list.statusCode());
         JsonNode items = json.readTree(list.body()).get("list"); assertFalse(items.isEmpty());
         assertEquals(200, browser.get("/api/sake/" + items.get(0).get("no").asLong(), null).statusCode());
-        assertEquals(400, browser.post("/api/recommend/sake", "{\"food\":\" \"}", false).statusCode());
+        assertEquals(401, browser.post("/api/recommend/sake", "{\"food\":\" \"}", false).statusCode());
     }
 
     @Test void corsUsesConfiguredFrontendOriginAndRejectsOtherSites() throws Exception {
@@ -229,14 +233,21 @@ class AuthMySqlIntegrationTests {
     @Test void cachedRecommendationsInBothDirectionsUseRealDatabaseWithoutExternalAi() throws Exception {
         var sakeNos = db.queryForList("SELECT no FROM SAKE ORDER BY no LIMIT 3", Long.class);
         String food = "Integration-food-" + UUID.randomUUID();
+        // 테스트 DB를 재사용해도 기존 캐시를 더하지 않고 새 테스트 제품의 캐시만 만든다.
+        Long source=sakeNos.getFirst();
+        String sourceId=UUID.randomUUID().toString();
+        db.update("INSERT INTO SAKE(source_id,brewery_no,name_ja) SELECT ?,brewery_no,? FROM SAKE WHERE no=?",Math.abs(UUID.randomUUID().getLeastSignificantBits()),sourceId,source);
+        Long foodSake=db.queryForObject("SELECT no FROM SAKE WHERE name_ja=?",Long.class,sourceId);
         for (int i = 0; i < 3; i++) {
-            db.update("INSERT INTO RECOMMEND_FOOD(sake_no,name,reason) VALUES(?,?,?)", sakeNos.get(0), "Food " + i, "Test reason");
+            db.update("INSERT INTO RECOMMEND_FOOD(sake_no,name,reason) VALUES(?,?,?)", foodSake, "Food " + i, "Test reason");
             db.update("INSERT INTO RECOMMEND_SAKE(food,sake_no,reason) VALUES(?,?,?)", food, sakeNos.get(i), "Test reason");
         }
         var browser = new Browser();
-        var foods = browser.post("/api/recommend/food", json.writeValueAsString(Map.of("sakeNo", sakeNos.get(0))), false);
-        assertEquals(200, foods.statusCode()); assertEquals(3, json.readTree(foods.body()).get("recommends").size());
-        var sakes = browser.post("/api/recommend/sake", json.writeValueAsString(Map.of("food", food)), false);
-        assertEquals(200, sakes.statusCode()); assertEquals(3, json.readTree(sakes.body()).get("recommendations").size());
+        // 공용 캐시 서비스는 그대로 유지하지만 공개 HTTP 추천은 이제 인증·크레딧 경계를 거친다.
+        var recommendations = contextRecommendations();
+        assertEquals(3, recommendations.foodRecommendList(foodSake).getRecommends().size());
+        assertEquals(3, recommendations.sakeRecommendList(food).getRecommendations().size());
     }
+    @Autowired com.sakezuki.backend.recommend.service.RecommendService recommendationService;
+    private com.sakezuki.backend.recommend.service.RecommendService contextRecommendations() { return recommendationService; }
 }

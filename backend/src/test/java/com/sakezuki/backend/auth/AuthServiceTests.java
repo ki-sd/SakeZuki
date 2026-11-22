@@ -28,7 +28,10 @@ class AuthServiceTests {
         provider.setPasswordEncoder(passwords);
         JwtProperties properties = new JwtProperties();
         properties.setAccessTokenExpiration(Duration.ofMinutes(15));
-        return new AuthServiceImpl(new ProviderManager(provider), jwt, properties, members, users, refresh);
+        var policy=new com.sakezuki.backend.identity.IdentityProperties();
+        policy.setTermsVersion("test-v1");policy.setPrivacyVersion("test-v1");policy.setTermsUrl("/terms");policy.setPrivacyUrl("/privacy");
+        return new AuthServiceImpl(new ProviderManager(provider), jwt, properties, members, users, refresh,policy,
+                mock(com.sakezuki.backend.identity.IdentityTransactions.class));
     }
     private MemberVO member(String password) {
         MemberVO member = new MemberVO();
@@ -39,6 +42,9 @@ class AuthServiceTests {
     }
     private LoginRequestDTO credentials(String password) {
         var dto = new LoginRequestDTO(); dto.setEmail("member@example.com"); dto.setPassword(password); return dto;
+    }
+    private SocialSignupRequestDTO signup() {
+        var dto=new SocialSignupRequestDTO();dto.setTermsVersion("test-v1");dto.setPrivacyVersion("test-v1");return dto;
     }
 
     @Test void normalLoginUsesBcryptAndIssuesTokens() {
@@ -76,7 +82,7 @@ class AuthServiceTests {
         when(members.createSocialMember(any(), any())).thenReturn(1L);
         when(members.getLoginData("member@example.com")).thenReturn(null, saved);
         when(refresh.issue(1L)).thenReturn(new RefreshTokenService.Issued(1L, "opaque"));
-        var dto = new SocialSignupRequestDTO(); dto.setAddress1("서울시"); dto.setPhone("010-1234-5678");
+        var dto = signup(); dto.setAddress1("서울시"); dto.setPhone("010-1234-5678");
         assertNotNull(service().socialSignup(new SocialSignupDTO("GOOGLE", "sub", "member@example.com", "이름"), dto));
         verify(members).createSocialMember(argThat(m -> m.getPassword() == null && "01012345678".equals(m.getPhone())),
                 argThat(s -> "GOOGLE".equals(s.getProvider()) && "sub".equals(s.getProviderUserId())));
@@ -84,7 +90,7 @@ class AuthServiceTests {
 
     @Test void duplicateEmailOrSocialIdentityDoesNotLinkAccounts() {
         var info = new SocialSignupDTO("GOOGLE", "sub", "member@example.com", "이름");
-        var dto = new SocialSignupRequestDTO(); dto.setAddress1("서울시"); dto.setPhone("01012345678");
+        var dto = signup(); dto.setAddress1("서울시"); dto.setPhone("01012345678");
         when(members.getLoginData("member@example.com")).thenReturn(member(null));
         assertThrows(ResponseStatusException.class, () -> service().socialSignup(info, dto));
         when(members.findSocialAccount("GOOGLE", "sub")).thenReturn(new SocialAccountVO());
@@ -94,8 +100,8 @@ class AuthServiceTests {
 
     @Test void validatesSignupInput() {
         assertThrows(IllegalArgumentException.class, () -> service().socialSignup(
-                new SocialSignupDTO("GOOGLE", "sub", "member@example.com", "이름"), new SocialSignupRequestDTO()));
-        var dto = new SocialSignupRequestDTO(); dto.setAddress1("서울시"); dto.setPhone("-------");
+                new SocialSignupDTO("GOOGLE", "sub", "member@example.com", "이름"), signup()));
+        var dto = signup(); dto.setAddress1("서울시"); dto.setPhone("-------");
         assertThrows(IllegalArgumentException.class, () -> service().socialSignup(
                 new SocialSignupDTO("GOOGLE", "sub", "member@example.com", "이름"), dto));
     }

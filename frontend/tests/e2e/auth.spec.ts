@@ -14,7 +14,7 @@ test("anonymous requests: CSRF, 401 and public sake API through the real proxy",
     const list = await request.get("/api/sake/list"); expect(list.status()).toBe(200);
     const data = await list.json(); expect(data.list.length).toBeGreaterThan(0);
     expect((await request.get(`/api/sake/${data.list[0].no}`)).status()).toBe(200);
-    expect((await request.post("/api/recommend/sake", { data: { food: " " } })).status()).toBe(400);
+    expect((await request.post("/api/recommend/sake", { data: { food: " " } })).status()).toBe(401);
 });
 
 test("Google start and failed callback preserve routing through Next.js", async ({ request }) => {
@@ -34,7 +34,7 @@ test("missing social session and callback cancellation show recovery links", asy
     await page.goto("/signup/social");
     await expect(page.getByRole("link", { name: "Google 로그인 다시 시작", exact: true })).toBeVisible();
     await page.goto("/login?error=oauth");
-    await expect(page.getByRole("alert")).toContainText("취소되었거나 실패");
+    await expect(page.getByRole("alert").filter({ hasText: "취소되었거나 실패" })).toBeVisible();
     await page.goto("/account");
     await expect(page).toHaveURL(/\/login\?returnTo=/);
 });
@@ -42,6 +42,7 @@ test("missing social session and callback cancellation show recovery links", asy
 test("phone input accepts only digits and inserts 3-4-4 hyphens", async ({ page }) => {
     // Only the one-time signup-info response is stubbed for this input-only test.
     await page.route("**/api/auth/social/signup-info", route => route.fulfill({ json: { provider: "GOOGLE", email: "form@example.invalid", name: "입력 테스트" } }));
+    await page.route("**/api/auth/signup-policy", route => route.fulfill({ json: { enabled: true, termsVersion: "test", privacyVersion: "test", termsUrl: "/terms", privacyUrl: "/privacy" } }));
     await page.goto("/signup/social");
     const phone = page.getByRole("textbox", { name: "전화번호", exact: true });
     await phone.fill("010abc"); await expect(phone).toHaveValue("010");
