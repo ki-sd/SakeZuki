@@ -24,11 +24,12 @@ export default function Header (){
     return (
         <header className={"border-b border-stone-200 bg-white"}>
             <div className={"page-shell flex min-h-16 flex-wrap items-center justify-between gap-3 py-2"}>
-                <Link href={"/sake"} className={"shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
+                <Link href={"/"} className={"shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
                     <img src={"/images/logo.png"} alt={"SakeZuki"} className={"h-10 w-auto object-contain sm:h-11"}/>
                 </Link>
 
-                <nav aria-label={"주 메뉴"} className={"flex h-full items-center gap-4 text-sm font-medium sm:gap-7"}>
+                <nav aria-label={"주 메뉴"} className={"flex w-full flex-wrap items-center gap-x-5 gap-y-3 pb-2 text-sm font-medium sm:w-auto sm:gap-x-6 sm:pb-0"}>
+                    <Link href="/examples" aria-current={pathname === "/examples" ? "page" : undefined} className="py-2 text-stone-600 underline-offset-4 hover:underline">무료 예시</Link>
                     <Link href={"/sake"} aria-current={pathname.startsWith("/sake") ? "page" : undefined}
                           className={`flex h-full items-center border-b-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700 ${pathname.startsWith("/sake") ? "border-stone-800 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900"}`}>
                         사케 목록

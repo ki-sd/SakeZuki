@@ -5,10 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.UUID;
 
 @Service
@@ -22,16 +19,9 @@ public class PaidRecommendationService {
     public String recommend(Long member, String key, String kind, String food, Long sakeNo) {
         if (key == null || !key.matches("[0-9a-fA-F-]{36}") || !UUID.fromString(key).toString().equalsIgnoreCase(key))
             throw CreditTransactions.error(HttpStatus.BAD_REQUEST, "올바른 Idempotency-Key가 필요합니다.");
-        String input;
-        if ("SAKE".equals(kind)) {
-            if (food == null || food.isBlank() || food.trim().length() > 200)
-                throw CreditTransactions.error(HttpStatus.BAD_REQUEST, "음식명은 1-200자로 입력해 주세요.");
-            input = food.trim();
-        } else {
-            if (sakeNo == null || sakeNo < 1) throw CreditTransactions.error(HttpStatus.BAD_REQUEST, "사케를 선택해 주세요.");
-            input = sakeNo.toString();
-        }
-        var reservation = transactions.reserve(member, key.toLowerCase(java.util.Locale.ROOT), digest(kind + "\n" + input), kind, input);
+        var condition = com.sakezuki.backend.recommend.RecommendationCondition.of(kind, food, sakeNo);
+        String input = condition.input();
+        var reservation = transactions.reserve(member, key.toLowerCase(java.util.Locale.ROOT), condition.hash(), kind, input);
         var request = reservation.request();
         if (!reservation.owner()) {
             return replay(request);
@@ -61,8 +51,4 @@ public class PaidRecommendationService {
         return request.resultSnapshot();
     }
 
-    private static String digest(String value) {
-        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
-        catch (java.security.NoSuchAlgorithmException error) { throw new IllegalStateException(error); }
-    }
 }

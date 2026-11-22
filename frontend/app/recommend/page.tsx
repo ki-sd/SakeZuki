@@ -1,540 +1,117 @@
 "use client";
 
-// 입력·자동완성 선택·추천 요청은 브라우저 이벤트에 따라 달라져 Client Component가 필요하다.
-import {Suspense,useState} from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {useSearchParams} from "next/navigation";
-import {useMutation,useQuery,useQueryClient} from "@tanstack/react-query";
-import {recommendFood,recommendSake} from "@/app/api/recommend";
-import {getSakeDetail,searchSake} from "@/app/api/sake";
-import type {SakeSearchItem} from "@/types/sake";
+import { useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/Header";
+import PairingResult, { ProductFacts } from "@/components/recommend/PairingResult";
 import SakeImage from "@/components/sake/SakeImage";
-import {getSakeTypeLabel} from "@/commons/sake";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getAccount } from "@/app/api/account";
 import { errorMessage } from "@/app/api/auth";
+import { getAccount, type History } from "@/app/api/account";
+import { prepareRecommendation, requestNewRecommendation } from "@/app/api/recommendation-flow";
+import { getSakeDetail, searchSake } from "@/app/api/sake";
+import { snapshotView, type RecommendationInput, type Snapshot } from "@/types/pairing";
+import type { SakeSearchItem } from "@/types/sake";
 
-// 화면의 두 추천 방향만 허용해 모드별 입력과 결과 렌더링이 같은 기준을 쓰게 한다.
-type RecommendMode="sake" | "food";
-
-export default function RecommendPage(){
-    // useSearchParams를 쓰는 하위 화면을 Suspense로 감싸 URL 매개변수 해석 중 보여줄 UI를 둔다.
-	return (
-		<Suspense fallback={<><Header/><main className={"page-shell py-10"}><div className={"ui-state"}>추천 화면을 불러오는 중...</div></main></>}>
-			<RecommendContent/>
-		</Suspense>
-	);
+export default function RecommendPage() {
+    return <Suspense fallback={<><Header /><main id="main-content" className="page-shell py-10"><p role="status">추천 화면을 불러오는 중…</p></main></>}><RecommendContent /></Suspense>;
 }
-
-function RecommendContent(){
-    const auth = useAuth();
-    const queryClient = useQueryClient();
+function RecommendContent() {
+    const params = useSearchParams(); const auth = useAuth(); const queryClient = useQueryClient();
+    const initialNo = Number(params.get("sakeNo"));
+    const validNo = Number.isSafeInteger(initialNo) && initialNo > 0;
+    const [mode, setMode] = useState<"SAKE" | "FOOD">(validNo ? "FOOD" : "SAKE");
+    const [food, setFood] = useState(params.get("food") ?? "");
+    const [search, setSearch] = useState("");
+    const [selected, setSelected] = useState<SakeSearchItem | null>(null);
+    const [busy, setBusy] = useState(false); const busyRef = useRef(false);
+    const [error, setError] = useState("");
+    const [completed, setCompleted] = useState<{ owner: number | undefined; result: Snapshot } | null>(null);
+    const [duplicate, setDuplicate] = useState<{ previous: History; condition: RecommendationInput; owner: number | undefined } | null>(null);
+    const notice = useRef<HTMLElement>(null);
     const account = useQuery({ queryKey: ["account", auth.member?.memberNo], queryFn: getAccount, enabled: auth.status === "authenticated", retry: false });
-    // 잔액이 0이어도 응답이 유실된 마지막 요청을 같은 키로 확인할 수 있어야 한다.
-    const allowed = account.data?.verified;
-    // 상세 페이지에서 ?sakeNo=...로 들어오면 이미 고른 제품을 이어받아 음식 추천 모드로 연다.
-	const searchParams=useSearchParams();
-	const sakeNoParam=searchParams.get("sakeNo");
-	const initialSakeNo=sakeNoParam ? Number(sakeNoParam) : null;
-	const hasInitialSake=initialSakeNo!==null && Number.isInteger(initialSakeNo) && initialSakeNo>0;
-
-    // 입력값·선택값·현재 모드는 화면에서만 쓰는 클라이언트 상태다.
-    // API 응답과 요청 상태는 아래 useQuery/useMutation이 별도로 관리한다.
-	const [mode,setMode]=useState<RecommendMode>(hasInitialSake ? "food" : "sake");
-	const [food,setFood]=useState("");
-	const [sakeSearch,setSakeSearch]=useState("");
-	const [selectedSake,setSelectedSake]=useState<SakeSearchItem | null>(null);
-
-    // URL의 no가 유효할 때만 제품을 조회한다. 상세 화면과 같은 키라 기존 상세 캐시를 재사용할 수 있다.
-	const initialSakeQuery=useQuery({
-		queryKey:["sakeDetail",initialSakeNo],
-		queryFn:()=>getSakeDetail(initialSakeNo!),
-		enabled:hasInitialSake,
-		retry:false
-	});
-
-    // 상세 응답을 자동완성 선택 결과와 같은 최소 형태로 맞춰 이후 요청 흐름을 공유한다.
-	const initialSake:SakeSearchItem | null=initialSakeQuery.data ? {
-		no:initialSakeQuery.data.no,
-		nameKo:initialSakeQuery.data.nameKo,
-		nameJa:initialSakeQuery.data.nameJa,
-		imageUrl:initialSakeQuery.data.imageUrl
-	} : null;
-
-	const currentSake=selectedSake || initialSake;
-
-	const selectedSakeDetailQuery=useQuery({
-		queryKey:["sakeDetail",currentSake?.no],
-		queryFn:()=>getSakeDetail(currentSake!.no),
-		enabled:!!currentSake,
-		staleTime:60000
-	});
-
-	const selectedSakeDetail=selectedSakeDetailQuery.data;
-
-    // 추천은 사용자가 버튼을 눌렀을 때 시작하는 POST 작업이라 useMutation으로 대기·실패·성공을 관리한다.
-    // 서버의 DB 영속 캐시와 별개로, 여기서는 현재 요청의 화면 상태를 다룬다.
-	const sakeMutation=useMutation({
-		mutationFn:recommendSake,
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ["account", auth.member?.memberNo] })
-	});
-
-	const foodMutation=useMutation({
-		mutationFn:recommendFood,
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ["account", auth.member?.memberNo] })
-	});
-
-    // 입력 문자열이 캐시 키가 되고 30초 동안 같은 검색어의 결과를 재사용한다.
-    // 2자 미만·다른 모드·이미 선택한 제품에서는 enabled로 자동완성 요청을 막는다.
-	const searchQuery=useQuery({
-		queryKey:["sakeSearch",sakeSearch],
-		queryFn:()=>searchSake(sakeSearch.trim()),
-		enabled:mode==="food" && sakeSearch.trim().length>=2 && !selectedSake && !hasInitialSake,
-		staleTime:30000
-	});
-
-    // 입력을 정리한 뒤 요청하고, 진행 중 재클릭은 막아 같은 POST가 겹치지 않게 한다.
-	const handleSakeRecommend=()=>{
-		const value=food.trim();
-
-        if(!allowed || !value || sakeMutation.isPending){
-			return;
-		}
-
-		sakeMutation.mutate({
-			food:value
-		});
-	};
-
-    // 표시된 문자열이 아니라 DB에서 선택한 sakeNo를 보내 제품 식별을 확정한다.
-	const handleFoodRecommend=()=>{
-        if(!allowed || !currentSake || foodMutation.isPending){
-			return;
-		}
-
-		foodMutation.mutate({
-			sakeNo:currentSake.no
-		});
-	};
-
-    // 새 제품을 고르면 이전 추천 결과를 지워 다른 제품의 결과가 남지 않게 한다.
-	const handleSakeSelect=(sake:SakeSearchItem)=>{
-		setSelectedSake(sake);
-		setSakeSearch(sake.nameKo || sake.nameJa);
-		foodMutation.reset();
-	};
-
-    // 선택 후 글자를 고치면 이전 no는 더 이상 입력과 맞지 않으므로 선택을 해제한다.
-	const handleSakeSearchChange=(value:string)=>{
-		setSakeSearch(value);
-		setSelectedSake(null);
-		foodMutation.reset();
-	};
-
-	const handleModeChange=(nextMode:RecommendMode)=>{
-		setMode(nextMode);
-	};
-
-	return (
-		<>
-			<Header/>
-
-            <main className={"page-shell pb-16 pt-8 sm:pt-10"}>
-                <div className="ui-panel mb-6 p-4 text-sm">
-                    <p>추천 1회당 1크레딧 · 이전 기록 다시 보기는 무료</p>
-                    <p className="mt-2">{auth.status !== "authenticated" ? "로그인 후 본인확인을 완료하면 추천을 이용할 수 있습니다." : !account.data?.verified ? "본인확인 서비스 연결을 준비 중입니다. 내 계정에서 진행 상태를 확인해 주세요." : `잔여 크레딧 ${account.data.balance}개`}</p>
-                    <Link href="/account" className="mt-2 inline-block underline">내 계정 · 크레딧 · 추천 기록</Link>
-                    {(sakeMutation.isError || foodMutation.isError) && <p role="alert" className="mt-2 text-red-700">{errorMessage(sakeMutation.error || foodMutation.error)}</p>}
-                </div>
-				<section className={"mb-7"}>
-					<h1 className={"text-2xl font-semibold tracking-tight text-stone-900"}>
-						음식 페어링
-					</h1>
-
-					<p className={"mt-1.5 text-sm text-stone-500"}>
-						음식이나 사케를 선택해 어울리는 조합을 찾아보세요.
-					</p>
-				</section>
-
-				<div className={"mb-7 flex border-b border-stone-200"}>
-					<button type={"button"} onClick={()=>handleModeChange("sake")} aria-pressed={mode==="sake"}
-							className={`ui-tab ${
-								mode==="sake"
-									? "ui-tab-active"
-									: ""
-							}`}>
-						음식으로 사케 찾기
-					</button>
-
-					<button type={"button"} onClick={()=>handleModeChange("food")} aria-pressed={mode==="food"}
-							className={`ui-tab ${
-								mode==="food"
-									? "ui-tab-active"
-									: ""
-							}`}>
-						사케로 음식 찾기
-					</button>
-				</div>
-
-				{mode==="sake" && (
-					<>
-						<section className={"ui-panel max-w-3xl p-5 sm:p-6"}>
-							<label htmlFor={"food"} className={"mb-2 block text-sm font-medium text-stone-800"}>
-								음식
-							</label>
-
-							<div className={"flex flex-col gap-2 sm:flex-row"}>
-								<input id={"food"} type={"text"} value={food}
-									   onChange={(e)=>setFood(e.target.value)}
-									   onKeyDown={(e)=>{
-										   if(e.key==="Enter"){
-											   handleSakeRecommend();
-										   }
-									   }}
-									   placeholder={"예: 삼겹살, 스키야키, 회"} disabled={sakeMutation.isPending}
-									   className={"ui-input w-full flex-1"}
-								/>
-
-								<button type={"button"} onClick={handleSakeRecommend}
-										disabled={!allowed || !food.trim() || sakeMutation.isPending}
-										 className={"ui-button w-full sm:w-auto"}>
-									{sakeMutation.isPending ? "추천 중..." : "추천받기"}
-								</button>
-							</div>
-						</section>
-
-                        {/* mutation 상태를 그대로 사용해 최초 생성처럼 오래 걸리는 요청도 대기·오류·결과를 구분한다. */}
-						{sakeMutation.isPending && (
-							<section className={"ui-state mt-7"}>
-								<div className={"mx-auto mb-4 h-6 w-6 animate-spin rounded-full border-2 border-stone-200 border-t-stone-700"}/>
-
-								<p className={"font-semibold text-gray-800"}>
-									음식과 잘 어울리는 사케를 찾고 있어요.
-								</p>
-
-								<p className={"mt-2 text-sm text-gray-500"}>
-									처음 추천하는 음식은 시간이 조금 걸릴 수 있어요.
-								</p>
-							</section>
-						)}
-
-						{sakeMutation.isError && (
-							<section className={"mt-7 rounded-lg border border-red-200 bg-red-50 p-5"}>
-								<p className={"font-semibold text-red-700"}>
-									추천을 불러오지 못했습니다.
-								</p>
-
-								<p className={"mt-1 text-sm text-red-600"}>
-									잠시 후 다시 시도해주세요.
-								</p>
-							</section>
-						)}
-
-						{sakeMutation.isSuccess && (
-							<section className={"mt-10"}>
-								<div className={"mb-5"}>
-									<h2 className={"break-words text-xl font-semibold text-stone-900 [overflow-wrap:anywhere]"}>
-										&apos;{sakeMutation.data.food}&apos;과 어울리는 사케
-									</h2>
-
-									<p className={"mt-1 text-sm text-stone-500"}>
-										어울리는 이유를 함께 확인해 보세요.
-									</p>
-								</div>
-
-								{sakeMutation.data.recommendations.length===0 && (
-									<div className={"ui-state"}>추천 결과가 없습니다. 다른 음식으로 다시 찾아보세요.</div>
-								)}
-
-								<div className={"grid gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
-									{sakeMutation.data.recommendations.map((sake)=>(
-										<Link key={sake.no} href={`/sake/${sake.no}`}
-											  className={"group min-w-0 overflow-hidden rounded-lg border border-stone-200 bg-white transition-colors hover:border-stone-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-700"}>
-											<div className={"flex h-56 items-center justify-center bg-stone-100 p-5"}>
-												<img src={sake.imageUrl || "/images/sake-placeholder.png"}
-													 alt={sake.nameKo || sake.nameJa}
-													 className={"h-full w-full object-contain"}/>
-											</div>
-
-											<div className={"p-4 sm:p-5"}>
-												<div className={"mb-4"}>
-													<h3 className={"break-words text-base font-semibold leading-6 text-stone-900 [overflow-wrap:anywhere]"}>
-														{sake.nameKo || sake.nameJa}
-													</h3>
-
-													{sake.nameKo && (
-														<p className={"mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]"}>
-															{sake.nameJa}
-														</p>
-													)}
-
-													{sake.breweryNameKo && (
-														<p className={"mt-2 text-sm text-gray-500"}>
-															{sake.breweryNameKo}
-														</p>
-													)}
-												</div>
-
-												<div className={"mb-4 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-600"}>
-													{sake.sakeType && (
-														<span>
-															{sake.sakeType}
-														</span>
-													)}
-
-													{sake.prefecture && (
-														<span>
-															{sake.prefecture}
-														</span>
-													)}
-
-													{sake.polishingRatio && (
-														<span>
-															정미 {sake.polishingRatio}
-														</span>
-													)}
-												</div>
-
-												<div className={"border-t border-stone-100 pt-4"}>
-													<p className={"mb-1 text-xs font-medium text-stone-500"}>
-														추천 이유
-													</p>
-
-													<p className={"break-words text-sm leading-6 text-stone-700 [overflow-wrap:anywhere]"}>
-														{sake.reason}
-													</p>
-												</div>
-											</div>
-										</Link>
-									))}
-								</div>
-							</section>
-						)}
-					</>
-				)}
-
-				{mode==="food" && (
-					<>
-						<section className={"ui-panel max-w-3xl p-5 sm:p-6"}>
-							<label htmlFor={"sakeSearch"} className={"mb-2 block text-sm font-medium text-stone-800"}>
-								사케
-							</label>
-
-							{hasInitialSake && initialSakeQuery.isPending ? (
-								<div className={"rounded-md bg-stone-100 px-4 py-4 text-sm text-stone-500"}>
-									사케 정보를 불러오는 중...
-								</div>
-							) : (
-								<>
-									<div className={"flex flex-col gap-2 sm:flex-row"}>
-										<div className={"relative min-w-0 flex-1"}>
-											<input id={"sakeSearch"} type={"text"}
-												   value={selectedSake
-													   ? sakeSearch
-													   : initialSake
-														   ? initialSake.nameKo || initialSake.nameJa
-														   : sakeSearch}
-												   onChange={(e)=>handleSakeSearchChange(e.target.value)}
-												   onKeyDown={(e)=>{
-													   if(e.key==="Enter" && currentSake){
-														   handleFoodRecommend();
-													   }
-												   }}
-												   placeholder={"사케 이름을 검색해주세요."}
-												   disabled={foodMutation.isPending || hasInitialSake}
-												   autoComplete={"off"}
-												   className={"ui-input w-full"}
-											/>
-
-											{!hasInitialSake && !selectedSake && sakeSearch.trim().length>=2 && (
-												<div className={"absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-sm"}>
-													{searchQuery.isFetching && (
-														<p className={"px-4 py-4 text-sm text-gray-500"}>
-															검색 중...
-														</p>
-													)}
-
-													{!searchQuery.isFetching && searchQuery.data?.length===0 && (
-														<p className={"px-4 py-4 text-sm text-gray-500"}>
-															검색 결과가 없습니다.
-														</p>
-													)}
-
-                                                    {/* 검색 결과의 no를 key와 선택 식별자로 함께 사용한다. */}
-													{!searchQuery.isFetching && searchQuery.data?.map((sake)=>(
-														<button key={sake.no} type={"button"} onClick={()=>handleSakeSelect(sake)}
-																className={"flex w-full items-center gap-3 border-b border-stone-100 px-3 py-2.5 text-left transition last:border-b-0 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-stone-700"}>
-															<div className={"relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-stone-100"}>
-                                                                <SakeImage src={sake.imageUrl}
-                                                                           alt={sake.nameKo || sake.nameJa}/>
-															</div>
-
-															<div className={"min-w-0"}>
-																<p className={"truncate text-sm font-medium text-stone-900"}>
-																	{sake.nameKo || sake.nameJa}
-																</p>
-
-																{sake.nameKo && (
-																	<p className={"mt-1 truncate text-sm text-gray-400"}>
-																		{sake.nameJa}
-																	</p>
-																)}
-															</div>
-														</button>
-													))}
-												</div>
-											)}
-										</div>
-
-										<button type={"button"} onClick={handleFoodRecommend}
-											disabled={!allowed || !currentSake || foodMutation.isPending}
-												className={"ui-button w-full sm:w-auto"}>
-											{foodMutation.isPending ? "추천 중..." : "추천받기"}
-										</button>
-									</div>
-
-									{currentSake && (
-										<div className={"group relative mt-4 border-t border-stone-200 pt-4"}>
-											<Link href={`/sake/${currentSake.no}`}
-											      className={"flex min-w-0 items-center gap-3 rounded-md p-1 transition hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-stone-700"}>
-												<div className={"relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-stone-100"}>
-													<SakeImage src={currentSake.imageUrl} alt={currentSake.nameKo || currentSake.nameJa}/>
-												</div>
-
-												<div className={"min-w-0"}>
-													<p className={"text-sm font-medium text-gray-500"}>
-														선택한 사케
-													</p>
-
-													<p className={"break-words text-sm font-semibold text-stone-900 [overflow-wrap:anywhere]"}>
-														{currentSake.nameKo || currentSake.nameJa}
-													</p>
-
-													{currentSake.nameKo && (
-														<p className={"mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]"}>
-															{currentSake.nameJa}
-														</p>
-													)}
-												</div>
-											</Link>
-
-											{selectedSakeDetail && (
-												<div className={"pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-72 rounded-lg border border-stone-200 bg-white p-4 shadow-lg group-hover:block group-focus-within:block"}>
-													<p className={"mb-3 text-sm font-semibold text-stone-900"}>
-														간단 정보
-													</p>
-
-													<div className={"grid grid-cols-2 gap-x-4 gap-y-2 text-sm"}>
-														<span className={"text-stone-500"}>종류</span>
-														<span className={"text-stone-800"}>
-															{selectedSakeDetail.sakeType ? getSakeTypeLabel(selectedSakeDetail.sakeType) : "-"}
-                    									</span>
-
-														<span className={"text-stone-500"}>니혼슈도</span>
-														<span className={"text-stone-800"}>
-															{selectedSakeDetail.sakeMeterValue || "-"}
-														</span>
-
-														<span className={"text-stone-500"}>정미보합</span>
-														<span className={"text-stone-800"}>
-															{selectedSakeDetail.polishingRatio || "-"}
-														</span>
-
-														<span className={"text-stone-500"}>알코올</span>
-														<span className={"text-stone-800"}>
-															{selectedSakeDetail.alcoholPercentage || "-"}
-														</span>
-													</div>
-
-													<p className={"mt-3 border-t border-stone-100 pt-3 text-xs text-stone-400"}>
-														클릭하면 상세 정보를 볼 수 있습니다.
-													</p>
-												</div>
-											)}
-										</div>
-									)}
-
-									{hasInitialSake && initialSakeQuery.isError && (
-										<p className={"mt-4 text-sm text-red-600"}>
-											사케 정보를 불러오지 못했습니다.
-										</p>
-									)}
-								</>
-							)}
-						</section>
-
-						{foodMutation.isPending && (
-							<section className={"ui-state mt-7"}>
-								<div className={"mx-auto mb-4 h-6 w-6 animate-spin rounded-full border-2 border-stone-200 border-t-stone-700"}/>
-
-								<p className={"font-semibold text-gray-800"}>
-									이 사케와 잘 어울리는 음식을 찾고 있어요.
-								</p>
-
-								<p className={"mt-2 text-sm text-gray-500"}>
-									처음 추천하는 사케는 시간이 조금 걸릴 수 있어요.
-								</p>
-							</section>
-						)}
-
-						{foodMutation.isError && (
-							<section className={"mt-7 rounded-lg border border-red-200 bg-red-50 p-5"}>
-								<p className={"font-semibold text-red-700"}>
-									추천을 불러오지 못했습니다.
-								</p>
-
-								<p className={"mt-1 text-sm text-red-600"}>
-									잠시 후 다시 시도해주세요.
-								</p>
-							</section>
-						)}
-
-						{foodMutation.isSuccess && (
-							<section className={"mt-10"}>
-								<div className={"mb-5"}>
-									<h2 className={"break-words text-xl font-semibold text-stone-900 [overflow-wrap:anywhere]"}>
-										{currentSake?.nameKo || currentSake?.nameJa}와 어울리는 음식
-									</h2>
-
-									<p className={"mt-1 text-sm text-stone-500"}>
-										어울리는 이유를 함께 확인해 보세요.
-									</p>
-								</div>
-
-								{foodMutation.data.recommends.length===0 && (
-									<div className={"ui-state"}>추천 결과가 없습니다. 다른 사케로 다시 찾아보세요.</div>
-								)}
-
-								<div className={"grid gap-4 md:grid-cols-3"}>
-									{foodMutation.data.recommends.map((recommendedFood,index)=>(
-										<article key={`${recommendedFood.name}-${index}`}
-												 className={"min-w-0 rounded-lg border border-stone-200 bg-white p-5"}>
-											<div className={"mb-3 text-xs tabular-nums text-stone-500"}>
-												{index+1}
-											</div>
-
-											<h3 className={"break-words text-lg font-semibold text-stone-900 [overflow-wrap:anywhere]"}>
-												{recommendedFood.name}
-											</h3>
-
-											<div className={"mt-4 border-t border-stone-100 pt-4"}>
-												<p className={"mb-1 text-xs font-medium text-stone-500"}>
-													추천 이유
-												</p>
-
-												<p className={"break-words text-sm leading-6 text-stone-700 [overflow-wrap:anywhere]"}>
-													{recommendedFood.reason}
-												</p>
-											</div>
-										</article>
-									))}
-								</div>
-							</section>
-						)}
-					</>
-				)}
-			</main>
-		</>
-	);
+    const initial = useQuery({ queryKey: ["sakeDetail", initialNo], queryFn: () => getSakeDetail(initialNo), enabled: validNo, retry: false });
+    const initialSake: SakeSearchItem | null = initial.data ? { no: initial.data.no, nameKo: initial.data.nameKo, nameJa: initial.data.nameJa, imageUrl: initial.data.imageUrl } : null;
+    const current = selected ?? initialSake;
+    const selectedDetail = useQuery({ queryKey: ["sakeDetail", current?.no], queryFn: () => getSakeDetail(current!.no), enabled: mode === "FOOD" && !!current, retry: false, staleTime: 60000 });
+    const searchQuery = useQuery({ queryKey: ["sakeSearch", search], queryFn: () => searchSake(search.trim()), enabled: mode === "FOOD" && search.trim().length >= 2 && !selected && !validNo, staleTime: 30000, retry: false });
+    const allowed = auth.status === "authenticated" && !!account.data?.verified;
+    const currentDuplicate = duplicate?.owner === auth.member?.memberNo ? duplicate : null;
+    const result = completed?.owner === auth.member?.memberNo ? completed?.result : null;
+    useEffect(() => { if (currentDuplicate) notice.current?.focus(); }, [currentDuplicate]);
+    function clearResult() { setDuplicate(null); setCompleted(null); setError(""); }
+    async function execute(input: RecommendationInput, confirmed: boolean) {
+        // React의 상태 반영 전 연속 클릭도 막는다. 실제 차감·인증 검증은 서버가 매번 수행한다.
+        if (busyRef.current || !allowed) return;
+        busyRef.current = true; setBusy(true); setError(""); setCompleted(null); setDuplicate(null);
+        const owner = auth.member?.memberNo;
+        try {
+            if (confirmed) setCompleted({ owner, result: await requestNewRecommendation(input) });
+            else {
+                const decision = await prepareRecommendation(input);
+                if (decision.type === "duplicate") setDuplicate({ ...decision, owner });
+                else setCompleted({ owner, result: decision.result });
+            }
+        } catch (error) { setError(errorMessage(error)); }
+        finally {
+            busyRef.current = false; setBusy(false);
+            await queryClient.invalidateQueries({ queryKey: ["account", owner] });
+            await queryClient.invalidateQueries({ queryKey: ["history", owner] });
+        }
+    }
+    function submit(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (mode === "SAKE" && food.trim()) void execute({ kind: "SAKE", food: food.trim() }, false);
+        else if (mode === "FOOD" && current) void execute({ kind: "FOOD", sakeNo: current.no }, false);
+    }
+    return <><Header /><main id="main-content" className="page-shell space-y-8 py-10 sm:py-14">
+        <header className="max-w-2xl"><p className="text-sm font-medium text-stone-500">음식에서 사케로, 사케에서 음식으로</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">사케 페어링</h1>
+            <p className="mt-4 text-sm leading-7 text-stone-600">새 요청은 공용 캐시 사용 여부와 관계없이 1크레딧입니다. 이전 결과와 같을 수 있으며, 이미 받은 기록의 재열람은 무료입니다.</p></header>
+        <aside className="ui-panel p-5 text-sm leading-7" aria-label="추천 이용 상태">
+            {auth.status === "loading" || (auth.status === "authenticated" && account.isPending) ? <p role="status">회원 이용 상태를 확인하고 있습니다…</p> :
+                account.isError && auth.status === "authenticated" ? <p role="alert">회원 정보를 확인하지 못했습니다. {errorMessage(account.error)}</p> :
+                allowed ? <><p className="font-semibold">잔여 크레딧 {account.data?.balance}개</p>{account.data?.balance === 0 && <p>새 추천을 위한 크레딧이 부족합니다. 이전 기록은 무료로 볼 수 있으며 유료 충전은 준비 중입니다.</p>}</> :
+                    <><p className="font-semibold">AI 추천 기능은 정식 서비스 준비 중입니다.</p><p>현재는 추천 예시를 무료로 확인하실 수 있습니다. 본인확인이 필요한 회원 기능은 마이페이지에서 안내합니다.</p></>}
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2"><Link className="underline underline-offset-4" href="/examples">무료 페어링 예시 보기</Link><Link className="underline underline-offset-4" href="/account">내 계정 · 크레딧 · 추천 기록</Link></div>
+        </aside>
+        <section className="ui-panel p-5 sm:p-7" aria-label="추천 조건">
+            <div className="mb-7 flex flex-wrap gap-2" aria-label="추천 방향">
+                {([["SAKE", "음식으로 사케 찾기"], ["FOOD", "사케로 음식 찾기"]] as const).map(([value,label]) => <button key={value} type="button" disabled={busy} aria-pressed={mode === value} onClick={() => { clearResult(); setMode(value); }}
+                    className={mode === value ? "ui-button" : "ui-button-secondary"}>{label}</button>)}
+            </div>
+            <form onSubmit={submit} className="space-y-5">
+                {mode === "SAKE" ? <label className="flex flex-col gap-2 text-sm font-medium">음식<input className="ui-input" value={food} maxLength={200} disabled={busy} placeholder="예: 삼겹살, 스키야키, 회"
+                    onChange={e => { clearResult(); setFood(e.target.value); }} required /></label> :
+                    <div className="space-y-3"><label className="flex flex-col gap-2 text-sm font-medium">사케 이름<input className="ui-input" value={selected ? selected.nameKo || selected.nameJa : validNo ? initialSake?.nameKo || initialSake?.nameJa || "" : search}
+                        onChange={e => { clearResult(); setSelected(null); setSearch(e.target.value); }} disabled={busy || validNo} placeholder="두 글자 이상 입력해 주세요" /></label>
+                        {validNo && initial.isPending && <p role="status" className="text-sm">선택한 제품을 확인하고 있습니다…</p>}
+                        {initial.isError && validNo && <p role="alert" className="text-sm text-red-700">{errorMessage(initial.error)}</p>}
+                        {searchQuery.isFetching && <p role="status" className="text-sm">사케를 찾고 있습니다…</p>}
+                        {searchQuery.isError && <p role="alert" className="text-sm text-red-700">사케 검색에 실패했습니다. 잠시 후 다시 입력해 주세요.</p>}
+                        {!selected && !validNo && search.trim().length >= 2 && searchQuery.data && <ul className="max-h-64 overflow-auto rounded-md border border-stone-200">
+                            {searchQuery.data.map(item => <li key={item.no}><button type="button" disabled={busy} className="w-full min-h-11 px-4 py-3 text-left text-sm hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => { clearResult(); setSelected(item); }}>{item.nameKo || item.nameJa}</button></li>)}
+                            {!searchQuery.data.length && <li className="p-4 text-sm text-stone-500">검색 결과가 없습니다.</li>}</ul>}
+                        {current && <div className="flex gap-4 rounded-md bg-stone-50 p-4"><div className="relative h-24 w-16 shrink-0"><SakeImage src={current.imageUrl} alt={current.nameKo || current.nameJa} /></div><div className="min-w-0 flex-1 space-y-3"><p className="break-words text-sm text-stone-600">선택한 제품: <Link className="underline" href={`/sake/${current.no}`}>{current.nameKo || current.nameJa}</Link></p>
+                            {selectedDetail.data && <ProductFacts product={selectedDetail.data} />}</div></div>}
+                    </div>}
+                <button className="ui-button" disabled={!allowed || busy || (mode === "SAKE" ? !food.trim() : !current)}>{busy ? "추천 요청 확인 중…" : "추천받기"}</button>
+                <p className="text-xs leading-6 text-stone-500">먼저 최근 기록을 확인합니다. 같은 조건의 유효한 기록이 있으면 무료 열람과 새 요청 중 선택할 수 있습니다.</p>
+            </form>
+        </section>
+        {busy && <p role="status" className="ui-state">추천 요청을 확인하고 있습니다. 완료될 때까지 잠시 기다려 주세요.</p>}
+        {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm leading-7 text-red-800"><p>{error}</p><p className="mt-2">이전 기록 확인에 실패하면 새 과금을 진행하지 않습니다. 응답을 받지 못한 추천 요청은 같은 조건으로 다시 확인해 주세요.</p></div>}
+        {currentDuplicate && <section ref={notice} tabIndex={-1} role="region" aria-labelledby="duplicate-title" className="rounded-lg border border-amber-300 bg-amber-50 p-6 focus-visible:outline-2 focus-visible:outline-stone-700">
+            <h2 id="duplicate-title" className="text-lg font-semibold">이전에 동일한 조건으로 추천받은 기록이 있습니다.</h2>
+            <p className="mt-3 text-sm leading-7 text-stone-600">추천일 {new Date(currentDuplicate.previous.completedAtEpoch * 1000).toLocaleString("ko-KR")} · 열람 만료 {new Date(currentDuplicate.previous.expiresAtEpoch * 1000).toLocaleString("ko-KR")}</p>
+            <p className="mt-2 text-sm leading-7">새 요청도 공용 캐시를 사용할 수 있어 결과가 이전과 같을 수 있습니다.</p>
+            <div className="mt-5 flex flex-wrap gap-3"><Link className="ui-button" href={`/account/recommendations/${currentDuplicate.previous.id}`}>이전 추천 결과 보기 - 무료</Link>
+                <button type="button" className="ui-button-secondary" disabled={busy || !account.data?.balance} onClick={() => execute(currentDuplicate.condition, true)}>새롭게 추천받기 - 1크레딧</button>
+                <button type="button" className="min-h-11 px-3 text-sm underline" onClick={() => setDuplicate(null)}>취소</button></div>
+            {!account.data?.balance && <p className="mt-3 text-sm">현재 크레딧이 부족합니다. 이전 결과는 무료로 확인할 수 있습니다.</p>}
+        </section>}
+        {result && <PairingResult result={snapshotView(result)} />}
+    </main></>;
 }

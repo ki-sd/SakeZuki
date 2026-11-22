@@ -94,3 +94,16 @@ test("return destinations reject external URLs and authentication loops", () => 
         assert.equal(auth.safeReturnTo(value), "/sake");
     assert.equal(auth.safeReturnTo("/account?tab=profile"), "/account?tab=profile");
 });
+
+test("expired login can read fixed public examples but never anonymously retry paid APIs", async () => {
+    const publicHarness = setup();
+    await publicHarness.auth.login("user@example.com", "password");
+    publicHarness.failRefresh();
+    const config = { url: "/examples/recommendations", headers: { Authorization: "Bearer access" } };
+    await publicHarness.response({ config, response: { status: 401 } });
+    assert.equal(config.headers.Authorization, undefined);
+    const paidHarness = setup();
+    await paidHarness.auth.login("user@example.com", "password");
+    paidHarness.failRefresh();
+    await assert.rejects(paidHarness.response({ config: { url: "/recommend/sake", headers: { Authorization: "Bearer access" } }, response: { status: 401 } }));
+});
