@@ -41,6 +41,21 @@ public class ControllerException {
     public ResponseEntity<String> unreadable(HttpMessageNotReadableException e) {
         return ResponseEntity.badRequest().body("요청 형식을 확인해 주세요.");
     }
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<String> unsupportedMedia() {
+        return ResponseEntity.status(415).body("지원하지 않는 미디어 유형입니다.");
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<String> oversizedMultipart() {
+        return ResponseEntity.status(413).body("업로드 용량을 줄여 주세요.");
+    }
+
+    @ExceptionHandler({org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+            org.springframework.web.multipart.MultipartException.class})
+    public ResponseEntity<String> malformedParameter() {
+        return ResponseEntity.status(422).body("필수 입력과 요청 형식을 확인해 주세요.");
+    }
     // 입력 오류와 예기치 않은 서버 오류를 구분해 프론트가 실패 상태를 표시할 수 있게 한다.
     // 내부 예외 상세는 로그에 남기고 일반 오류 응답에는 노출하지 않는다.
     // 400
