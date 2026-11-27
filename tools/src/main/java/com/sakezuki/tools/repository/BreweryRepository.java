@@ -22,6 +22,12 @@ public class BreweryRepository {
     public long save(
             BreweryData brewery
     ) throws SQLException {
+        return GuideCatalogSource.BREWERY.save(conn, brewery.getSourceId(), () -> saveLegacy(brewery));
+    }
+
+    private long saveLegacy(
+            BreweryData brewery
+    ) throws SQLException {
 
         String sql = """
                 INSERT INTO BREWERY (

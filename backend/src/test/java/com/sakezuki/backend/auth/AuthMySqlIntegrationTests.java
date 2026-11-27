@@ -5,6 +5,9 @@ import com.sakezuki.backend.auth.service.InvalidRefreshTokenException;
 import com.sakezuki.backend.auth.service.AuthService;
 import com.sakezuki.backend.auth.dto.SocialSignupRequestDTO;
 import com.sakezuki.backend.member.service.MemberService;
+import com.sakezuki.backend.recommend.dto.SakeRecommendCondition;
+import com.sakezuki.backend.recommend.mapper.RecommendMapper;
+import com.sakezuki.backend.sake.mapper.SakeMapper;
 import com.sakezuki.backend.security.CustomUserDetails;
 import com.sakezuki.backend.security.jwt.*;
 import com.sakezuki.backend.security.oauth.SocialSignupDTO;
@@ -18,6 +21,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -68,6 +72,43 @@ class AuthMySqlIntegrationTests {
         memberNo = db.queryForObject("SELECT no FROM MEMBER WHERE email=?", Long.class, email);
         db.update("INSERT INTO MEMBER_AUTHORITY(member_no,authority) VALUES(?, 'ROLE_USER')", memberNo);
     }
+    @Autowired SakeMapper catalog;
+    @Autowired RecommendMapper recommendations;
+
+    @Test
+    @Transactional
+    void sourceLessSakeParticipatesInSearchDetailAndRecommendationCandidates() {
+        db.update("INSERT INTO BREWERY(name_ja, name_ko) VALUES('架空蔵', '합성 양조장')");
+        Long brewery = db.queryForObject("SELECT no FROM BREWERY WHERE name_ja='架空蔵'", Long.class);
+        db.update("INSERT INTO BRAND(brewery_no, name_ja) VALUES(?, '架空銘柄')", brewery);
+        Long brand = db.queryForObject("SELECT no FROM BRAND WHERE name_ja='架空銘柄'", Long.class);
+        db.update("""
+                INSERT INTO SAKE(brewery_no, brand_no, name_ja, name_ko, sake_type, image_url)
+                VALUES(?, ?, '架空酒', '합성카탈로그외부ID없음', '合成特定名称', 'https://example.invalid/fixture.png')
+                """, brewery, brand);
+        Long no = db.queryForObject("SELECT no FROM SAKE WHERE name_ja='架空酒'", Long.class);
+        db.update("INSERT INTO SAKE_SOURCE(sake_no, source_system) VALUES(?, 'USER_SUBMISSION')", no);
+        db.update("INSERT INTO SAKE_RECOMMEND_PROFILE(sake_no) VALUES(?)", no);
+
+        assertEquals(no, catalog.searchSakeData("합성카탈로그외부ID없음").getFirst().getNo());
+        assertEquals(no, catalog.getSakeList(Map.of("fd", "합성카탈로그외부ID없음", "start", 0)).getFirst().getNo());
+        var detail = catalog.getSakeDetail(no);
+        assertEquals("https://example.invalid/fixture.png", detail.getImageUrl());
+        assertEquals("架空銘柄", detail.getBrand().getNameJa());
+        assertEquals("架空蔵", detail.getBrewery().getNameJa());
+        assertNull(detail.getSakeMeterValue());
+        var condition = new SakeRecommendCondition();
+        condition.setSakeTypes(List.of("合成特定名称"));
+        // A fully specified recommendation query, while the product profile stays unknown.
+        condition.setSakeMeterMin(999.0);
+        condition.setSakeMeterMax(999.0);
+        condition.setAcidityMin(999.0);
+        condition.setAcidityMax(999.0);
+        condition.setPolishingRatioMin(999.0);
+        condition.setPolishingRatioMax(999.0);
+        assertTrue(recommendations.getSakeRecommendCandidates(condition).stream().anyMatch(item -> no.equals(item.getNo())));
+    }
+
     private class Browser {
         final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
         final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
@@ -94,7 +135,7 @@ class AuthMySqlIntegrationTests {
     }
 
     @Test void flywayV4AndActualTablesAreValid() {
-        assertEquals(5, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class));
+        assertEquals(9, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class));
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='4' AND success=1", Integer.class));
         assertNotNull(db.queryForList("SELECT token_hash,family_id,used FROM AUTH_REFRESH_TOKEN LIMIT 1"));
     }

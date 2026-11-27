@@ -26,6 +26,17 @@ public class SakeRepository {
             long breweryNo,
             long brandNo
     ) throws SQLException {
+        if (sake.getSourceId() == null || sake.getSourceId() <= 0) {
+            throw new SQLException("SAKE_GUIDE source ID is required");
+        }
+        return GuideCatalogSource.SAKE.save(conn, sake.getSourceId().toString(), () -> saveLegacy(sake, breweryNo, brandNo));
+    }
+
+    private long saveLegacy(
+            SakeData sake,
+            long breweryNo,
+            long brandNo
+    ) throws SQLException {
 
         String sql = """
                 INSERT INTO SAKE (
@@ -155,16 +166,16 @@ public class SakeRepository {
         String sql="""
             SELECT source_id
             FROM SAKE
-            WHERE image_checked='N'
+            WHERE image_checked='N' AND source_id IS NOT NULL AND %s
             ORDER BY no
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         List<Long> sourceIds=new ArrayList<>();
 
         try (PreparedStatement pstmt=conn.prepareStatement(sql);
              ResultSet rs=pstmt.executeQuery()) {
             while (rs.next()) {
-                sourceIds.add(rs.getLong("source_id"));
+                sourceIds.add(rs.getObject("source_id", Long.class));
             }
         }
 
@@ -175,8 +186,8 @@ public class SakeRepository {
         String sql="""
             UPDATE SAKE
             SET image_url=?,image_checked='Y'
-            WHERE source_id=?
-            """;
+            WHERE source_id=? AND %s
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try (PreparedStatement pstmt=conn.prepareStatement(sql)) {
             pstmt.setString(1,imageUrl);

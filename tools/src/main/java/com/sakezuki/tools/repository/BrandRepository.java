@@ -23,6 +23,13 @@ public class BrandRepository {
             BrandData brand,
             long breweryNo
     ) throws SQLException {
+        return GuideCatalogSource.BRAND.save(conn, brand.getSourceId(), () -> saveLegacy(brand, breweryNo));
+    }
+
+    private long saveLegacy(
+            BrandData brand,
+            long breweryNo
+    ) throws SQLException {
 
         String sql = """
                 INSERT INTO BRAND (
