@@ -6,6 +6,7 @@
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
 - [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있으며, PR #8은 IMG-01 브랜치에 병합됐으며 이 기록 기준 main에는 없다.
 - [IMG-03A](IMG-03A_IMAGE_STORAGE.md)는 Tools에서 합성 이미지를 검증·변환하고 모의 저장 응답의 무결성을 확인했다. 다음은 IMG-03B의 DB 메타데이터·Flyway·백엔드 API이며, 실이미지 처리는 이용 허가와 상품 승인 확인이 필요하다.
+- PR #9로 IMG-02와 IMG-03A가 main에 반영됐다. [IMG-03A-IT](IMG-03A_IT_R2_SMOKE.md)는 Windows에서 개발 버킷과 실제 R2 호환성을 확인하는 단계이며 로컬 실행 결과가 남아 있다.
 - 운영 장애, 본인확인/PG·이미지 권리, 운영 SHA는 [현재 상태](PROJECT_STATE.md)에서 확인한다. 실키, 외부 API 호출, R2 실제 업로드, 배포 등은 [승인 범위](../../AGENTS.md)를 따른다.
 
 ## 중단 시 체크포인트

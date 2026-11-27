@@ -43,3 +43,16 @@ tasks.register('productMappingDryRun', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.sakezuki.tools.mapping.ProductMappingDryRun'
 }
+
+tasks.register('r2DevSmoke', JavaExec) {
+    group = 'verification'
+    description = 'Opt-in smoke test against the sakezuki-images-dev R2 bucket.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.sakezuki.tools.images.R2DevSmoke'
+    doFirst {
+        if (System.getenv('R2_SMOKE_CONFIRM') != 'sakezuki-images-dev' ||
+                System.getenv('R2_BUCKET') != 'sakezuki-images-dev') {
+            throw new GradleException('R2 smoke requires explicit confirmation for sakezuki-images-dev.')
+        }
+    }
+}
