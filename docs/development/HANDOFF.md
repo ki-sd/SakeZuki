@@ -4,7 +4,7 @@
 
 - 기록 기준 main은 `a1cd5dd64ff92c0e2fb3e200d26e971fc7e58b76`이며 DEV-01 문서 PR #6이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #6](https://github.com/ki-sd/SakeZuki/pull/6)
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
-- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. IMG-02의 표본 매핑, IMG-03의 합성 데이터 설계 조건은 조사 문서를 참조한다.
+- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있으며, IMG-03에서는 같은 계약으로 합성 저장 검증을 진행할 수 있다.
 - 운영 장애, 본인확인/PG·이미지 권리, 운영 SHA는 [현재 상태](PROJECT_STATE.md)에서 확인한다. 실키, 외부 API 호출, R2 실제 업로드, 배포 등은 [승인 범위](../../AGENTS.md)를 따른다.
 
 ## 중단 시 체크포인트

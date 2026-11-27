@@ -1,0 +1,49 @@
+{
+  "legacy": [
+    {
+      "no": 1,
+      "sourceId": 101,
+      "facts": {
+        "name": "架空 純米",
+        "brewery": "架空酒造",
+        "brand": "架空",
+        "designation": "純米酒",
+        "polishingRatio": "55%",
+        "variant": "720 mL / 火入れ"
+      }
+    },
+    {
+      "no": 2,
+      "sourceId": 102,
+      "facts": {
+        "name": "別銘柄",
+        "brewery": "別の蔵",
+        "brand": "別",
+        "designation": "純米酒",
+        "polishingRatio": "60%",
+        "variant": "720 mL"
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "url": "https://sake-guide.com/sake/fixture-101",
+      "detailHtml": "<link rel='canonical' href='/sake/fixture-101'>",
+      "facts": {
+        "name": "架空 純米",
+        "brewery": "架空酒造",
+        "brand": "架空",
+        "designation": "純米酒",
+        "polishingRatio": "55%",
+        "variant": "720 mL / 火入れ"
+      },
+      "evidenceRef": "synthetic-fixture-101"
+    }
+  ],
+  "listings": [
+    {
+      "pageUrl": "https://sake-guide.com/sake",
+      "html": "<a href='/sake/fixture-101'>架空 純米</a>"
+    }
+  ]
+}
