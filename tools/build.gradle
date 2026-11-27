@@ -11,6 +11,9 @@ repositories {
 
 dependencies {
     implementation 'org.jsoup:jsoup:1.21.2'
+    implementation 'com.squareup.okhttp3:okhttp:5.3.2'
+    implementation 'software.amazon.awssdk:s3:2.42.12'
+    implementation 'software.amazon.awssdk:url-connection-client:2.42.12'
     implementation 'com.mysql:mysql-connector-j:26.7.0'
     implementation 'com.google.genai:google-genai:1.72.0'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
