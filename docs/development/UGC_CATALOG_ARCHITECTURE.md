@@ -1,6 +1,6 @@
 # 사용자 참여형 사케 카탈로그와 IMG-03B 설계
 
-2026-11-27 KST · 설계 제안 · 기준 원격 main `192cf92f70b9c19b02163e9629779b4657b2cc1a`. 감사를 포함한 등록·검수와 공개 카탈로그를 분리하고, IMG-03C와 사용자 제보는 승인된 이미지 자산 계약을 공유한다. 구현과 Flyway 적용은 설계 검토 후 별도 PR에서 진행한다. PR #11의 Windows 개발 버킷 핵심 검증 기록을 이 브랜치에 포함했다. [PR #11](https://github.com/ki-sd/SakeZuki/pull/11) · [Windows 검증](IMG-03A_IT_R2_SMOKE.md)
+2026-11-27 KST · 설계 제안 · 기준 원격 main `e57ba23480af690656d8cad9b96e841af041c870`. 감사를 포함한 등록·검수와 공개 카탈로그를 분리하고, IMG-03C와 사용자 제보는 승인된 이미지 자산 계약을 공유한다. 구현과 Flyway 적용은 설계 검토 후 별도 PR에서 진행한다. PR #11의 Windows 개발 버킷 핵심 검증 기록은 main에 병합됐다. [PR #11](https://github.com/ki-sd/SakeZuki/pull/11) · [Windows 검증](IMG-03A_IT_R2_SMOKE.md)
 
 ## 기존 코드와 호환 경계
 

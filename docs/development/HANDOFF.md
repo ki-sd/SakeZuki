@@ -2,7 +2,7 @@
 
 저장소는 `ki-sd/SakeZuki`, 기준은 원격 `main`이다. [공통 규칙](../../AGENTS.md)의 시작 순서에 따라 필요한 문서를 읽고, 실제 브랜치·HEAD·작업 트리·원격 PR을 확인한다.
 
-- 기록 기준 main은 `192cf92f70b9c19b02163e9629779b4657b2cc1a`이며 스모크 실행기 PR #10이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #10](https://github.com/ki-sd/SakeZuki/pull/10)
+- 기록 기준 main은 `e57ba23480af690656d8cad9b96e841af041c870`이며 Windows R2 검증 기록 PR #11이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #11](https://github.com/ki-sd/SakeZuki/pull/11)
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
 - [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있다. IMG-02와 IMG-03A는 PR #9를 통해 main에 반영됐다.
 - [IMG-03A](IMG-03A_IMAGE_STORAGE.md)는 Tools에서 합성 이미지를 검증·변환하고 모의 저장 응답의 무결성을 확인했다. 다음은 IMG-03B 이미지 메타데이터·공통 저장소·출처 구조다. 실이미지 처리는 이용 허가와 상품 승인 확인이 필요하다.
