@@ -10,6 +10,10 @@ SakeZuki는 사케의 기본 정보와 브랜드·양조장 정보를 탐색하�
 
 ---
 
+## 개발 시작과 인수인계
+
+[공통 개발 규칙](AGENTS.md)에서 시작하고, [새 세션 인수인계](docs/development/HANDOFF.md)와 [Cloud·Windows 설정](docs/development/CLOUD_SETUP.md)을 확인하세요.
+
 ## 공개 화면과 무료 예시
 
 - `/`에서 서비스 소개, 사케 검색, 양방향 페어링 안내, 로그인·마이페이지로 이동합니다. 모바일 화면과 키보드 본문 이동을 지원합니다.
