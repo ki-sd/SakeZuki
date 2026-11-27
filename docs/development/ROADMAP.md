@@ -9,8 +9,11 @@
 | IMG-02 / P1 | 신규 상품 식별자 매핑 · 구현 병합 | 합성 입력으로 dry-run 구현·검증. 실제 링크·상품 변형 및 이용 범위 확인 대기 | [IMG-02 계약](IMG-02_PRODUCT_MAPPING.md) · 미적용 |
 | IMG-03A / P1 | 이미지 검증·변환·Object Storage · DONE | IMG-02 의존. 합성 이미지·모의 HTTP/S3 검증 | [이미지 저장 계약](IMG-03A_IMAGE_STORAGE.md) · 미적용 |
 | IMG-03A-IT / P1 | Windows 개발 버킷 R2 스모크 · DONE | 핵심 검증 완료. 읽기 전용 권한 미실행, 테스트 객체 정리 미확인 | [검증 기록](IMG-03A_IT_R2_SMOKE.md) · 개발 버킷 |
-| IMG-03B / P1 | DB 메타데이터·Flyway·백엔드 API · PLANNED | IMG-03A. 승인·권리·검증된 키 계약 및 새 마이그레이션 | 미등록 · 미적용 |
-| IMG-03C / P1 | 마이그레이션 실행기·멱등성·실패 복구·롤백 · PLANNED | IMG-03A/B. 실데이터는 원본과 권리 확인 및 승인 필요. SLF4J 구현체 부재 경고를 로깅 개선 후보로 검토 | 미등록 · 미적용 |
+| IMG-03B / P1 | 이미지 메타데이터 및 공통 저장소·출처 구조 · PLANNED | IMG-03A. 공통 모듈, 권리·메타데이터 계약, 외부 ID 호환 전환 설계 검토 후 구현 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
+| IMG-03C / P1 | 마이그레이션 실행기·멱등성·실패 복구·롤백 · PLANNED | IMG-03B 공통 이미지 자산 사용. 실제 데이터는 권리 및 승인 필요. SLF4J 개선 검토 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
+| UGC-01 / P1 | 사용자 제보 스키마 및 Backend API · PLANNED | IMG-03B. 제출, 리비전, 첨부, 소유자 API 및 제한 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
+| UGC-02 / P1 | 관리자 검토 및 승인 워크플로 · PLANNED | UGC-01. 역할, 중복, 권리 확인 및 공개 트랜잭션 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
+| UGC-03 / P1 | 사용자·관리자 Frontend 화면 · PLANNED | UGC-01/02. 등록·보완·검수 화면 E2E | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
 | UI-01 / P1 | 검색 중심 홈·공통 이미지 처리·E2E/시각 QA · PLANNED | 테스트 이미지로 IMG-03과 독립 진행 가능. 검색/상세·404/대체 이미지·모바일·키보드 회귀 확인. 빌드 시 Google Fonts 의존성을 제거할 수 있도록 기존 라이선스와 디자인을 보존하는 `next/font/local` 전환 검토 | 미등록 · 미적용 |
 | OPS-01 / P2 | OCI ARM64 재배포 · PLANNED | 적용 후보·백업/복원 확인·사용자 승인. 운영 SHA, health, 볼륨과 데이터 보존 기록 | 미등록 · 기존 내부 기동만 사용자 확인 |
 | OPS-02 / P2 | 도메인·HTTPS·Google OAuth 운영 검증 · BLOCKED | 도메인·인증서·redirect URI 승인 후 실제 왕복과 쿠키·프록시 확인 | 미등록 · 미적용 |

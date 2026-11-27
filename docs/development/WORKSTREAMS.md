@@ -10,8 +10,13 @@
 | IMG-02 / 상품 매핑 | 구현 병합 / 실데이터 확인 대기 | main | Tools·개발 문서 / [PR #8](https://github.com/ki-sd/SakeZuki/pull/8) / [dry-run 계약](IMG-02_PRODUCT_MAPPING.md) |
 | IMG-03A / 검증·변환·저장 | DONE / PR #9 병합 | main | Tools·CI / [저장 계약](IMG-03A_IMAGE_STORAGE.md) / 권리 및 운영 적용 별도 |
 | IMG-03A-IT / R2 실제 검증 | DONE / Windows 핵심 검증 통과 | main / PR #10 | Tools / [검증 기록](IMG-03A_IT_R2_SMOKE.md) / 읽기 전용 미실행·정리 미확인 |
-| IMG-03B / DB·Flyway·API | PLANNED | IMG-03A | Backend·Flyway / 승인·권리 원장 및 메타데이터 |
-| IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03A/B | Tools / 실제 데이터·비용·공개 전환은 별도 승인 / SLF4J 로깅 개선 검토 |
+| IMG-03B / 이미지 메타데이터·공통 저장소·출처 | PLANNED | IMG-03A | Backend·Tools·Flyway·Docker / 공통 계약과 외부 ID 호환 |
+| IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03B | Tools / UGC와 공통 이미지 자산 / 별도 운영 승인 및 SLF4J 개선 검토 |
+| UGC-01 / 제보 스키마·Backend API | PLANNED | IMG-03B | Backend·Flyway / 제보·리비전·첨부와 소유권 |
+| UGC-02 / 관리자 검토·승인 | PLANNED | UGC-01 | Backend·카탈로그·인증 / 공개 트랜잭션·권리·동시성 |
+| UGC-03 / 사용자·관리자 화면 | PLANNED | UGC-01/02 | Frontend / 역할, API DTO, 검토·보완 흐름 |
 | UI-01 / 탐색 UI | PLANNED / 미배정 | main / 미생성 / 미등록 | frontend / 합성 이미지 사용 / 이미지 DTO·공통 컴포넌트·lockfile 조율 |
+
+IMG-03B 및 UGC 작업은 [공통 설계](UGC_CATALOG_ARCHITECTURE.md)를 기준으로 조율한다.
 
 작업 시작 시 직접 수정 영역과 공용 자원(AGENTS·Flyway 버전·DTO·인증/크레딧·환경변수·lockfile·CI·Compose·Jenkins)을 Issue/PR에서 조율한다. 겹치면 인터페이스를 합의하거나 순서를 정한다. 브랜치 하나에 주 개발자 한 명만 쓰며, 빈번한 진행 보고를 위해 이 문서를 매번 수정할 필요는 없다.
