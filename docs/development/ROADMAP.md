@@ -6,8 +6,10 @@
 | --- | --- | --- | --- |
 | DEV-01 / P0 | Cloud 개발 기준선 · PARTIALLY READY | Cloud 복원·검증 결과 및 Docker 빌드 제약을 [기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)에 보관. 컨테이너 HTTP/HTTPS는 GitHub Actions 결과 참조 | DEV-01 문서 변경 · 해당 없음 |
 | IMG-01 / P1 | 외부 이미지 장애 및 출처·권리 · BLOCKED | 저장소 분석 완료. 승인된 접속 환경에서 원본 응답과 이용 조건 확인. 권리 불명확 자료는 운영 복제 보류 | [조사 기록](IMG-01_IMAGE_SOURCES.md) · 미적용 |
-| IMG-02 / P1 | 신규 상품 식별자 매핑 · PLANNED | IMG-01. 일대일·다대일·미매칭과 검수 방법 명시 | 미등록 · 미적용 |
-| IMG-03 / P1 | R2 저장 경로·이미지 메타데이터·새 Flyway·마이그레이션 도구 · PLANNED | 합성 이미지로 먼저 검증. 실제 적용은 IMG-01/02와 승인 필요. dry-run·재실행·중복·실패·롤백 및 새 버전 확인 | 미등록 · 미적용 |
+| IMG-02 / P1 | 신규 상품 식별자 매핑 · 검토 대기 | 합성 입력으로 dry-run 구현·검증. 실제 링크·상품 변형 및 이용 범위 확인 대기 | [IMG-02 계약](IMG-02_PRODUCT_MAPPING.md) · 미적용 |
+| IMG-03A / P1 | 이미지 검증·변환·Object Storage · 검토 대기 | IMG-02 의존. 합성 이미지·모의 HTTP/S3 검증 | [이미지 저장 계약](IMG-03A_IMAGE_STORAGE.md) · 미적용 |
+| IMG-03B / P1 | DB 메타데이터·Flyway·백엔드 API · PLANNED | IMG-03A. 승인·권리·검증된 키 계약 및 새 마이그레이션 | 미등록 · 미적용 |
+| IMG-03C / P1 | 마이그레이션 실행기·멱등성·실패 복구·롤백 · PLANNED | IMG-03A/B. 실데이터는 원본과 권리 확인 및 승인 필요 | 미등록 · 미적용 |
 | UI-01 / P1 | 검색 중심 홈·공통 이미지 처리·E2E/시각 QA · PLANNED | 테스트 이미지로 IMG-03과 독립 진행 가능. 검색/상세·404/대체 이미지·모바일·키보드 회귀 확인. 빌드 시 Google Fonts 의존성을 제거할 수 있도록 기존 라이선스와 디자인을 보존하는 `next/font/local` 전환 검토 | 미등록 · 미적용 |
 | OPS-01 / P2 | OCI ARM64 재배포 · PLANNED | 적용 후보·백업/복원 확인·사용자 승인. 운영 SHA, health, 볼륨과 데이터 보존 기록 | 미등록 · 기존 내부 기동만 사용자 확인 |
 | OPS-02 / P2 | 도메인·HTTPS·Google OAuth 운영 검증 · BLOCKED | 도메인·인증서·redirect URI 승인 후 실제 왕복과 쿠키·프록시 확인 | 미등록 · 미적용 |

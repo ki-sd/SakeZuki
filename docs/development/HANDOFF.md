@@ -2,9 +2,10 @@
 
 저장소는 `ki-sd/SakeZuki`, 기준은 원격 `main`이다. [공통 규칙](../../AGENTS.md)의 시작 순서에 따라 필요한 문서를 읽고, 실제 브랜치·HEAD·작업 트리·원격 PR을 확인한다.
 
-- 기록 기준 main은 `a1cd5dd64ff92c0e2fb3e200d26e971fc7e58b76`이며 DEV-01 문서 PR #6이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #6](https://github.com/ki-sd/SakeZuki/pull/6)
+- 기록 기준 main은 `91b24c2015aabf7798971c2d23812d0efb3375f4`이며 IMG-01 PR #7이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #7](https://github.com/ki-sd/SakeZuki/pull/7)
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
-- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. IMG-02의 표본 매핑, IMG-03의 합성 데이터 설계 조건은 조사 문서를 참조한다.
+- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있으며, PR #8은 IMG-01 브랜치에 병합됐으며 이 기록 기준 main에는 없다.
+- [IMG-03A](IMG-03A_IMAGE_STORAGE.md)는 Tools에서 합성 이미지를 검증·변환하고 모의 저장 응답의 무결성을 확인했다. 다음은 IMG-03B의 DB 메타데이터·Flyway·백엔드 API이며, 실이미지 처리는 이용 허가와 상품 승인 확인이 필요하다.
 - 운영 장애, 본인확인/PG·이미지 권리, 운영 SHA는 [현재 상태](PROJECT_STATE.md)에서 확인한다. 실키, 외부 API 호출, R2 실제 업로드, 배포 등은 [승인 범위](../../AGENTS.md)를 따른다.
 
 ## 중단 시 체크포인트

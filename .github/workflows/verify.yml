@@ -19,6 +19,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Tools 단위 테스트
+        working-directory: tools
+        run: bash ./gradlew --no-daemon test
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -48,5 +51,6 @@ jobs:
           name: test-reports
           path: |
             backend/build/reports/tests
+            tools/build/reports/tests
             frontend/test-results
           retention-days: 3
