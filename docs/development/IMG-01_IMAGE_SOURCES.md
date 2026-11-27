@@ -15,11 +15,13 @@
 
 기존 목록·상세 경로와 선택자는 저장소 코드에서 확인했고, 이미지 경로와 상품명은 시드에서 확인했다. URL 보유 행의 처음·중간·끝에서 의도적으로 3건을 골라 JPG와 PNG, 서로 다른 양조장과 상품군을 포함했다. 요청은 Cloud 기본 프록시와 TLS 검증을 사용했다. 사이트 홈 GET과 아래 상세·이미지 HEAD 6건 모두 CONNECT 403으로 중단됐다. curl 종료 56, `http_code=000`, `http_connect=403`이었다. 실행 상태에서 제한 정책이 적용 중이며 이 호스트는 허용 목록에 없음을 확인했다. HTTP 응답 본문, 원본의 403·404, 리디렉션 및 신규 HTML 구조는 관찰하지 못했다.
 
-| 상품 및 시드 정보 | 기존 상세 | 기존 이미지 | 신규 상세·이미지 및 식별자 |
+| 상품 및 시드 정보 | 기존 상세 | 기존 이미지 | 신규 상세 후보와 숫자 접미사 |
 | --- | --- | --- | --- |
-| 直実 特別本醸造 甕貯蔵酒 / 権田酒造 / 特別本醸造酒·60% / `no=1`, `source_id=17116` | [17116](https://sake-guide.com/sake/detail/17116) | [JPG](https://sake-guide.com/images/sake/main/big_d2026012337arur095140925498.jpg) | 미확인 |
-| 赤武 純米大吟醸 結の香 / 赤武酒造 / 純米大吟醸酒·40% / `no=2959`, `source_id=6917` | [6917](https://sake-guide.com/sake/detail/6917) | [JPG](https://sake-guide.com/images/sake/main/big_d20230615dnlg7k214605697583.jpg) | 미확인 |
-| 真澄 純米吟醸 辛口生一本 / 宮坂醸造 / 純米吟醸酒·55% / `no=7990`, `source_id=346` | [346](https://sake-guide.com/sake/detail/346) | [PNG](https://sake-guide.com/images/sake/main/big_d202202046ijp6z083953635220.png) | 미확인 |
+| 直実 特別本醸造 甕貯蔵酒 / 権田酒造 / 特別本醸造酒·60% / `no=1`, `source_id=17116` | [17116](https://sake-guide.com/sake/detail/17116) | [JPG](https://sake-guide.com/images/sake/main/big_d2026012337arur095140925498.jpg) | [sake-17116](https://sake-guide.com/sake/sake-17116) · `17116` |
+| 赤武 純米大吟醸 結の香 / 赤武酒造 / 純米大吟醸酒·40% / `no=2959`, `source_id=6917` | [6917](https://sake-guide.com/sake/detail/6917) | [JPG](https://sake-guide.com/images/sake/main/big_d20230615dnlg7k214605697583.jpg) | [akabu-6917](https://sake-guide.com/sake/akabu-6917) · `6917` |
+| 真澄 純米吟醸 辛口生一本 / 宮坂醸造 / 純米吟醸酒·55% / `no=7990`, `source_id=346` | [346](https://sake-guide.com/sake/detail/346) | [PNG](https://sake-guide.com/images/sake/main/big_d202202046ijp6z083953635220.png) | [masumi-346](https://sake-guide.com/sake/masumi-346) · `346` |
+
+위 신규 후보는 사용자가 전달한 별도 ChatGPT 공개 검색 조사에 근거한다. 검색 자료에서 세 상품명과 숫자 ID가 일치했다. Codex 직접 HTTP 관찰은 위 기존 요청의 CONNECT 차단까지다. 신규 페이지 응답, 리디렉션, canonical, 이미지 경로와 전체 ID 재사용은 확인 대기다.
 
 재현 예시는 `curl -sS -I --max-time 8 -o /dev/null -w 'origin=%{http_code} connect=%{http_connect}\n' https://sake-guide.com/sake/detail/17116`이다. 승인된 접속 환경에서 홈의 상품·약관 링크부터 따라가고, 표본에 대해 원래 URL과 최종 URL, 상태, MIME, canonical·상품 식별자·이미지 마크업(`src`, `srcset`, lazy-load, 구조화 데이터)을 함께 기록한다. HEAD가 지원되지 않으면 약관에서 허용하는 범위에서 해당 표본만 GET으로 확인한다. 오래된 이미지가 실패하지만 새 상세에 동일 상품과 새 이미지가 있으면 주소 변경 근거가 된다. 상세는 열리지만 기존 선택자만 사라졌으면 파서 계약 변경 근거가 된다. 접근 제어·삭제·상품 변형과도 구별한다.
 
@@ -28,6 +30,8 @@
 ## 이용 조건과 대체 출처
 
 현 세션에서 공식 약관, 데이터 제공 정책, 연락처, 이미지별 권리자를 읽을 수 없었다. 따라서 공개 표시, 자동 조회, 파일 복제, 리사이즈·형식 변환, R2 저장·캐시, 앱 재배포, 상업적 이용, 상품 데이터 사용 범위를 모두 미확인으로 기록한다. 공개 열람 가능 여부와 각 이용 권한은 별개다. 재조사 시 운영자가 연결한 공식 약관의 URL·버전·확인일, 허용 범위, 출처 표기와 삭제 대응, 제3자 사진 권리 예외를 기록한다. 약관과 robots.txt도 각각 확인하되, 크롤링 관련 지시만으로 저작권 허가를 판단하지 않는다. 확인되지 않은 자산은 운영 복제 대상에서 보류한다.
+
+별도 공개 검색 조사에서는 운영사를 共創株式会社로, 데이터 이용 문의처를 `info@sake-guide.com`으로 확인했다고 사용자가 전달했다. Codex는 이 세션에서 해당 공식 페이지나 권리 조건을 직접 조회하지 않았다. 아래 페이지는 재확인과 문의를 위한 참고 자료다. [운영 안내](https://sake-guide.com/ja/about) · [문의](https://sake-guide.com/ja/contact) · [양조장 안내](https://sake-guide.com/ja/for-breweries)
 
 | 출처 | 장점 | 선행 조건과 제약 |
 | --- | --- | --- |

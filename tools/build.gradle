@@ -33,3 +33,10 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs '-Dfile.encoding=UTF-8'
     defaultCharacterEncoding = 'UTF-8'
 }
+
+tasks.register('productMappingDryRun', JavaExec) {
+    group = 'verification'
+    description = 'Reviews local product mapping evidence and prints a JSON report without writes.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.sakezuki.tools.mapping.ProductMappingDryRun'
+}
