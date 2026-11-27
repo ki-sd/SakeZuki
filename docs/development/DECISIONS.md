@@ -12,3 +12,5 @@
 | DEC-006 | Proposed | 탐색 중심 홈으로 개편하는 방향. 현재 소개 랜딩·공개 예시 유지와 검색 우선 배치의 사용자 흐름을 비교한다. | frontend. [UI 계획](ROADMAP.md). 기능 범위 및 시각 QA 기준 확정 후 구현 |
 | DEC-007 | Accepted | GitHub를 공통 개발 기록의 기준으로 두고 Codex Cloud Linux를 기본 개발환경으로 준비한다. Windows와 다른 에이전트는 같은 규칙과 Git 이력을 읽는다. | [설정](CLOUD_SETUP.md) · [인수인계](HANDOFF.md). Cloud 기준선 실패 시 도구/권한을 재검토 |
 | DEC-008 | Accepted | 작업별 주 개발자, 별도 브랜치·작업 공간, 증거 SHA를 사용한다. 동시 push와 상시 문서 잠금 방식은 피하고 GitHub PR/Issue로 충돌을 조율한다. | [작업 범위](WORKSTREAMS.md) · [QA](../qa/README.md). 공유 자원 변경이 겹치면 작업 순서 재조정 |
+| DEC-009 | Proposed | 제보 리비전·승인 이력을 공개 카탈로그에서 분리하고, 내부 PK를 유지하면서 외부 ID를 출처별 연결로 옮긴다. 공개 전 승인 리비전과 상품 식별값의 중복을 검증한다. | [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) · 마이그레이션과 도구 호환 검증 후 확정 |
+| DEC-010 | Proposed | IMG-03C와 UGC가 이미지 자산·권리·검증된 객체 계약을 공유한다. 객체 저장과 DB 공개 전환은 개별 단계로 기록하고 활성 자산만 전달한다. | [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) · 공통 모듈, 권리 철회 및 캐시 정책 검토 |
