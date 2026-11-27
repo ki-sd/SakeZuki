@@ -51,6 +51,10 @@ public interface ImageStorage {
         public ReadLimitExceeded() { super("stored object exceeds verification limit"); }
     }
 
+    final class ObjectMissing extends IOException {
+        public ObjectMissing() { super("stored object missing"); }
+    }
+
     final class IntegrityMismatch extends IOException {
         public IntegrityMismatch() { super("stored object integrity mismatch"); }
     }

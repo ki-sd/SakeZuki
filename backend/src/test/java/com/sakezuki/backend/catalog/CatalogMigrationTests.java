@@ -85,15 +85,15 @@ class CatalogMigrationTests {
     }
 
     @Test
-    void v9UpgradePreservesCatalogRowsAndLegacyImageProjection() {
+    void v9UpgradePreservesCatalogRowsWithoutInventingImageHistory() {
         assertEquals(9, flyway("9").migrate().migrationsExecuted);
         Map<String, List<Map<String, Object>>> before = PRESERVED.stream().collect(
                 Collectors.toMap(table -> table, table -> db.queryForList("SELECT * FROM " + table + " ORDER BY 1")));
         assertEquals(1, flyway("10").migrate().migrationsExecuted);
         before.forEach((table, rows) -> assertEquals(rows, db.queryForList("SELECT * FROM " + table + " ORDER BY 1"), table));
         assertEquals(10_337, db.queryForObject("""
-                SELECT COUNT(*) FROM SAKE s JOIN CATALOG_SAKE_IMAGE_URL p ON s.no=p.sake_no
-                WHERE s.image_url <=> p.image_url
+                SELECT COUNT(*) FROM SAKE s
+                WHERE NOT EXISTS (SELECT 1 FROM SAKE_IMAGE h WHERE h.sake_no=s.no)
                 """, Integer.class));
         assertCompleteBackfill();
     }

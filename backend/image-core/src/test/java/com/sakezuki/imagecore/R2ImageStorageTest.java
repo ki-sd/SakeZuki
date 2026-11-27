@@ -92,6 +92,25 @@ class R2ImageStorageTest {
     }
 
     @Test
+    void incompleteTransportIsDifferentFromAnAbsentOrOversizedObject() throws Exception {
+        byte[] bytes = ImageFixtures.png(5, 5);
+        String hash = ImageTransform.sha256(bytes);
+        var key = new ImageStorage.ObjectKey("sake/1/image-v1/" + hash + ".png");
+        var expected = new ImageTransform.Info("image/png", bytes.length, 5, 5, hash);
+        var truncated = new R2ImageStorage(s3((method, args) -> {
+            var response = GetObjectResponse.builder().contentLength((long) bytes.length).build();
+            byte[] partial = java.util.Arrays.copyOf(bytes, bytes.length - 1);
+            return new ResponseInputStream<>(response, AbortableInputStream.create(new ByteArrayInputStream(partial)));
+        }), "fixture");
+        assertEquals(IOException.class, assertThrows(IOException.class, () ->
+                VerifiedImageStorage.readVerified(truncated, key, expected)).getClass());
+        var missing = new R2ImageStorage(s3((method, args) -> {
+            throw S3Exception.builder().statusCode(404).build();
+        }), "fixture");
+        assertThrows(ImageStorage.ObjectMissing.class, () -> VerifiedImageStorage.readVerified(missing, key, expected));
+    }
+
+    @Test
     void explicitUrlConnectionClientPerformsSignedConditionalPutAndGetAgainstLoopbackS3() throws Exception {
         byte[] bytes = ImageFixtures.png(5, 5);
         String sha = ImageTransform.sha256(bytes);

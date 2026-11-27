@@ -151,7 +151,7 @@
             s.no,
             s.name_ko AS nameKo,
             s.name_ja AS nameJa,
-            image_policy.image_url AS imageUrl,
+            <include refid="com.sakezuki.backend.image.CatalogImageMapper.catalogUrl"/> AS imageUrl,
             s.sake_type AS sakeType,
             b.prefecture,
             s.polishing_ratio AS polishingRatio,
@@ -162,7 +162,6 @@
         FROM RECOMMEND_SAKE rs
         JOIN SAKE s
             ON s.no=rs.sake_no
-        JOIN CATALOG_SAKE_IMAGE_URL image_policy ON image_policy.sake_no = s.no
         LEFT JOIN BRAND br
             ON br.no=s.brand_no
         LEFT JOIN BREWERY b

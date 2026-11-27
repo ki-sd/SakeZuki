@@ -91,7 +91,7 @@ WHERE r.id = (SELECT MAX(history.id) FROM IMAGE_RIGHTS_EVENT history WHERE histo
   AND r.valid_from <= UTC_TIMESTAMP(6) AND (r.valid_until IS NULL OR r.valid_until > UTC_TIMESTAMP(6));
 
 CREATE VIEW IMAGE_DELIVERY_CANDIDATE AS
-SELECT a.id AS asset_id, o.id AS object_id, r.id AS rights_event_id, o.object_key,
+SELECT a.id AS asset_id, o.id AS object_id, r.id AS rights_event_id, o.object_key, o.attempt,
        a.transformed_mime AS mime, a.transformed_bytes AS byte_length,
        a.transformed_sha256 AS sha256, a.transformed_width AS width, a.transformed_height AS height
 FROM IMAGE_ASSET a
@@ -105,18 +105,9 @@ WHERE o.storage_area = 'DELIVERY' AND o.storage_state = 'VERIFIED'
 
 CREATE VIEW PUBLIC_SAKE_IMAGE AS
 SELECT si.id AS link_id, si.active_primary_sake, si.sake_no, si.asset_id,
-       d.object_key, d.mime, d.byte_length, d.sha256, d.width, d.height,
+       d.object_id, d.attempt, d.object_key, d.mime, d.byte_length, d.sha256, d.width, d.height,
        CONCAT('/api/images/sakes/', si.sake_no, '/', si.asset_id) AS image_url
 FROM SAKE_IMAGE si
 JOIN IMAGE_DELIVERY_CANDIDATE d ON si.asset_id = d.asset_id AND si.object_id = d.object_id
   AND si.rights_event_id = d.rights_event_id
 WHERE si.active_primary_sake IS NOT NULL;
-
-CREATE VIEW CATALOG_SAKE_IMAGE_URL AS
-SELECT s.no AS sake_no, p.image_url AS managed_url,
-       EXISTS (SELECT 1 FROM SAKE_IMAGE h WHERE h.sake_no = s.no AND h.is_primary = TRUE) AS has_managed_history,
-       CASE WHEN p.link_id IS NOT NULL THEN p.image_url
-            WHEN EXISTS (SELECT 1 FROM SAKE_IMAGE h WHERE h.sake_no = s.no AND h.is_primary = TRUE) THEN NULL
-            ELSE s.image_url END AS image_url
-FROM SAKE s
-LEFT JOIN PUBLIC_SAKE_IMAGE p ON p.active_primary_sake = s.no;

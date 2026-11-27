@@ -6,6 +6,7 @@ import {useParams} from "next/navigation";
 import {useQuery} from "@tanstack/react-query";
 import {getSakeDetail} from "@/app/api/sake";
 import Header from "@/components/layout/Header";
+import SakeImage from "@/components/sake/SakeImage";
 import Link from "next/link";
 import {getSakeTypeLabel,getPrefectureLabel} from "@/commons/sake";
 import BreweryMap from "@/components/brewery/BreweryMap";
@@ -70,8 +71,7 @@ export default function SakeDetailPage(){
                 <section className={"grid gap-7 sm:grid-cols-[minmax(0,280px)_1fr] sm:gap-9 lg:grid-cols-[minmax(0,340px)_1fr] lg:gap-12"}>
                     <div className={"overflow-hidden rounded-lg border border-stone-200 bg-white"}>
                         <div className={"aspect-4/5 bg-stone-100 p-5 sm:aspect-auto sm:h-full sm:min-h-88"}>
-                            <img src={data.imageUrl || "/images/sake-placeholder.png"}
-                                alt={data.nameKo || data.nameJa} className={"h-full w-full object-contain"}/>
+                            <SakeImage src={data.imageUrl} alt={data.nameKo || data.nameJa} fill={false}/>
                         </div>
                     </div>
 

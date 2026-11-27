@@ -1,24 +1,32 @@
 "use client";
 
-// 원격 이미지 요청 실패는 렌더링 뒤 브라우저에서 알 수 있어 onError와 상태가 필요하다.
 import Image from "next/image";
 import {useState} from "react";
 
-interface SakeImageProps{
-    src:string | null;
-    alt:string;
+const placeholder = "/images/sake-placeholder.png";
+
+interface SakeImageProps {
+    src: string | null;
+    alt: string;
+    fill?: boolean;
 }
 
-export default function SakeImage({src,alt}:SakeImageProps){
-    // DB에 URL이 없거나 실제 이미지 로딩이 실패한 경우 모두 같은 로컬 이미지를 보여준다.
-    const [imageSrc,setImageSrc]=useState(src || "/images/sake-placeholder.png");
+export default function SakeImage({src, alt, fill = true}: SakeImageProps) {
+    const source = src || placeholder;
+    // A source change retires the old request and its error state together.
+    return <ImageRequest key={source} src={source} alt={alt} fill={fill}/>;
+}
 
+function ImageRequest({src, alt, fill}: {src: string; alt: string; fill: boolean}) {
+    const [failed, setFailed] = useState(false);
+    const usingPlaceholder = failed || src === placeholder;
+    const dimensions = fill ? {fill: true} : {width: 280, height: 350};
     return (
-        <Image src={imageSrc}
+        <Image src={usingPlaceholder ? placeholder : src}
                alt={alt}
-               fill
+               {...dimensions}
                unoptimized
-               onError={()=>setImageSrc("/images/sake-placeholder.png")}
-               className={"object-contain"}/>
+               onError={usingPlaceholder ? undefined : () => setFailed(true)}
+               className={fill ? "object-contain" : "h-full w-full object-contain"}/>
     );
 }

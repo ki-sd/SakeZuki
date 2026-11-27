@@ -23,8 +23,7 @@ class ImageAssetRepository {
     record Asset(String source, String evidence, ImageTransform.Info original,
                  ImageTransform.Info transformed, String version) {}
     record Stored(long id, String key, String version, String state, long attempt) {}
-    record PublicImage(long linkId, String objectKey, ImageTransform.Info media) {}
-    record CatalogImage(String managedUrl, boolean hasManagedHistory) {}
+    record PublicImage(long linkId, long objectId, long generation, String objectKey, ImageTransform.Info media) {}
 
     void ensureAsset(UUID id, Asset asset) {
         var original = asset.original();
@@ -73,27 +72,32 @@ class ImageAssetRepository {
                 .optional().orElseThrow(() -> new IllegalStateException("missing image object intent"));
     }
 
-    long begin(Stored object) {
+    Stored begin(Stored object, boolean recovery) {
+        if ("VERIFIED".equals(object.state())) return object;
+        String next = recovery ? "PERMANENT_FAILURE" : "PENDING";
         sql.sql("""
-                UPDATE IMAGE_OBJECT SET attempt = attempt + 1, storage_state = 'PENDING', failure_code = NULL
+                UPDATE IMAGE_OBJECT SET attempt = attempt + 1, storage_state = ?,
+                  failure_code = CASE WHEN ? THEN failure_code ELSE NULL END
                 WHERE id = ?
-                """).param(object.id()).update();
-        return object.attempt() + 1;
+                """).params(next, recovery, object.id()).update();
+        return new Stored(object.id(), object.key(), object.version(), next, object.attempt() + 1);
     }
 
-    boolean verified(long object, long attempt, ImageTransform.Info media) {
+    boolean verified(Stored object, ImageTransform.Info media) {
         return sql.sql("""
                 UPDATE IMAGE_OBJECT SET storage_state = 'VERIFIED', stored_bytes = ?, stored_sha256 = ?,
-                  verified_at = UTC_TIMESTAMP(6)
-                WHERE id = ? AND attempt = ? AND storage_state = 'PENDING'
-                """).params(media.byteLength(), media.sha256(), object, attempt).update() == 1;
+                  verified_at = UTC_TIMESTAMP(6), failure_code = NULL, attempt = attempt + 1
+                WHERE id = ? AND attempt = ? AND storage_state = ?
+                """).params(media.byteLength(), media.sha256(), object.id(), object.attempt(), object.state()).update() == 1;
     }
 
-    void failed(long object, long attempt, boolean retryable, String code) {
+    void failed(long object, long generation, String expectedState, boolean permanent, String code) {
         sql.sql("""
-                UPDATE IMAGE_OBJECT SET storage_state = ?, failure_code = ?
-                WHERE id = ? AND attempt = ? AND storage_state = 'PENDING'
-                """).params(retryable ? "RETRYABLE_FAILURE" : "PERMANENT_FAILURE", code, object, attempt).update();
+                UPDATE IMAGE_OBJECT SET storage_state = ?, failure_code = ?, attempt = attempt + 1,
+                  stored_bytes = NULL, stored_sha256 = NULL, verified_at = NULL
+                WHERE id = ? AND attempt = ? AND storage_state = ?
+                """).params(permanent ? "PERMANENT_FAILURE" : "RETRYABLE_FAILURE", code, object,
+                generation, expectedState).update();
     }
 
     void recordRights(UUID id, ImagePublicationService.Decision decision, String evidence, String actor,
@@ -121,17 +125,11 @@ class ImageAssetRepository {
 
     Optional<PublicImage> publicImage(long sakeNo, UUID id) {
         return sql.sql("""
-                SELECT link_id, object_key, mime, byte_length, width, height, sha256
+                SELECT link_id, object_id, attempt, object_key, mime, byte_length, width, height, sha256
                 FROM PUBLIC_SAKE_IMAGE WHERE active_primary_sake = ? AND asset_id = ?
-                """).params(sakeNo, id.toString()).query((rs, row) -> new PublicImage(rs.getLong("link_id"),
+                """).params(sakeNo, id.toString()).query((rs, row) -> new PublicImage(rs.getLong("link_id"), rs.getLong("object_id"), rs.getLong("attempt"),
                 rs.getString("object_key"), new ImageTransform.Info(rs.getString("mime"), rs.getInt("byte_length"),
                 rs.getInt("width"), rs.getInt("height"), rs.getString("sha256")))).optional();
-    }
-
-    Optional<CatalogImage> catalogImage(long sakeNo) {
-        return sql.sql("SELECT managed_url, has_managed_history FROM CATALOG_SAKE_IMAGE_URL WHERE sake_no = ?")
-                .param(sakeNo)
-                .query((rs, row) -> new CatalogImage(rs.getString(1), rs.getBoolean(2))).optional();
     }
 
     private static ImageTransform.Info media(ResultSet rs, String prefix) throws SQLException {

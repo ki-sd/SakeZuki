@@ -7,6 +7,8 @@ import com.sakezuki.imagecore.ImageStorage;
 import com.sakezuki.imagecore.ImageTransform;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -17,6 +19,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.imageio.ImageIO;
@@ -36,6 +39,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -66,6 +70,8 @@ class ImageAssetMySqlTests {
     @Autowired ImagePublicationService publication;
     @Autowired RecommendationImageProjection projection;
     @Autowired FakeStores stores;
+    @Autowired ImageAssetRepository repository;
+    @Autowired PlatformTransactionManager manager;
     @Autowired JdbcTemplate db;
     @Autowired SakeService sakes;
     @Autowired RecommendMapper recommendations;
@@ -213,7 +219,11 @@ class ImageAssetMySqlTests {
         var failed = get(path);
         assertEquals(503, failed.statusCode());
         assertEquals(0, failed.body().length);
+        assertEquals("PERMANENT_FAILURE", state(id, "DELIVERY"));
+        assertNull(sakes.getSakeDetail(sake).getImageUrl());
+        assertThrows(IllegalStateException.class, () -> publication.publishPrimary(newSake(), id));
         stores.delivery.objects.put(key, original);
+        assets.revalidate(id, ImageStores.Area.DELIVERY);
 
         stores.delivery.beforeRead = () -> publication.recordRights(id, ImagePublicationService.Decision.REVOKED,
                 "rights:concurrent", "fixture", null, null);
@@ -224,6 +234,198 @@ class ImageAssetMySqlTests {
         } finally {
             stores.delivery.beforeRead = () -> {};
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void stagingCorruptionIsQuarantinedAndDoesNotPoisonEitherDeliveryAttempt(boolean bytes) throws Exception {
+        UUID id = stage();
+        grant(id);
+        String key = key(id, "STAGING");
+        var original = stores.staging.objects.get(key);
+        stores.staging.objects.put(key, damage(original, bytes));
+        assertThrows(ImageStorage.IntegrityMismatch.class, () -> assets.prepareDelivery(id));
+        assertEquals("PERMANENT_FAILURE", state(id, "STAGING"));
+        assertEquals(0, db.queryForObject("""
+                SELECT COUNT(*) FROM IMAGE_OBJECT WHERE asset_id=? AND storage_area='DELIVERY'
+                """, Integer.class, id.toString()));
+        assertThrows(ImageStorage.IntegrityMismatch.class, () -> assets.revalidate(id, ImageStores.Area.STAGING));
+        stores.staging.objects.put(key, original);
+        assets.revalidate(id, ImageStores.Area.STAGING);
+        assets.prepareDelivery(id);
+        long sake = newSake();
+        publication.publishPrimary(sake, id);
+        stores.staging.objects.put(key, damage(original, bytes));
+        assertThrows(ImageStorage.IntegrityMismatch.class, () -> assets.prepareDelivery(id));
+        assertEquals("PERMANENT_FAILURE", state(id, "STAGING"));
+        assertEquals("VERIFIED", state(id, "DELIVERY"));
+        assertEquals(200, get(url(sake, id)).statusCode());
+    }
+
+    @Test
+    void metadataDamageHidesCatalogAndSnapshotUntilReadOnlyRecovery() throws Exception {
+        UUID id = ready();
+        long sake = newSake();
+        publication.publishPrimary(sake, id);
+        String key = key(id, "DELIVERY");
+        String path = url(sake, id);
+        var original = stores.delivery.objects.get(key);
+        stores.delivery.objects.put(key, damage(original, false));
+        assertThrows(ImageFailure.class, () -> assets.prepareDelivery(id));
+        assertEquals("PERMANENT_FAILURE", state(id, "DELIVERY"));
+        assertThrows(IllegalStateException.class, () -> assets.prepareDelivery(id));
+        assertEquals(404, get(path).statusCode());
+        String snapshot = """
+                {"sake":{"no":%d,"imageUrl":"https://legacy.example.invalid/image.png"}}
+                """.formatted(sake);
+        assertTrue(projection.currentImages(snapshot).contains("\"imageUrl\":null"));
+        stores.delivery.objects.put(key, original);
+        assets.revalidate(id, ImageStores.Area.DELIVERY);
+        assertEquals(200, get(path).statusCode());
+        assertEquals(1, stores.delivery.writes.get(key).get());
+    }
+
+    @Test
+    void transientReadsKeepVerifiedAndConfirmedMissingCanBeRestoredConditionally() throws Exception {
+        UUID id = ready();
+        long sake = newSake();
+        publication.publishPrimary(sake, id);
+        String key = key(id, "DELIVERY");
+        String path = url(sake, id);
+        Long generation = db.queryForObject("SELECT attempt FROM IMAGE_OBJECT WHERE object_key=? AND storage_area='DELIVERY'",
+                Long.class, key);
+        stores.delivery.beforeRead = () -> { throw new IOException("transient fixture"); };
+        try {
+            assertEquals(503, get(path).statusCode());
+            assertThrows(IOException.class, () -> assets.prepareDelivery(id));
+            assertEquals("VERIFIED", state(id, "DELIVERY"));
+            assertEquals(generation, db.queryForObject("SELECT attempt FROM IMAGE_OBJECT WHERE object_key=? AND storage_area='DELIVERY'",
+                    Long.class, key));
+        } finally {
+            stores.delivery.beforeRead = () -> {};
+        }
+        assertEquals(200, get(path).statusCode());
+        stores.delivery.objects.remove(key);
+        assertEquals(503, get(path).statusCode());
+        assertEquals("RETRYABLE_FAILURE", state(id, "DELIVERY"));
+        assertNull(sakes.getSakeDetail(sake).getImageUrl());
+        assets.prepareDelivery(id);
+        assertEquals(200, get(path).statusCode());
+        assertEquals(2, stores.delivery.writes.get(key).get());
+    }
+
+    @Test
+    void lateFailureFromAnotherWorkerCannotQuarantineRecoveredGeneration() throws Exception {
+        UUID id = ready();
+        long sake = newSake();
+        publication.publishPrimary(sake, id);
+        String key = key(id, "DELIVERY");
+        String path = url(sake, id);
+        var original = stores.delivery.objects.get(key);
+        stores.delivery.objects.put(key, damage(original, true));
+        var paused = new CountDownLatch(1);
+        var resume = new CountDownLatch(1);
+        var first = new AtomicBoolean(true);
+        stores.delivery.afterRead = () -> {
+            if (first.compareAndSet(true, false)) {
+                paused.countDown();
+                try {
+                    if (!resume.await(10, TimeUnit.SECONDS)) throw new IOException("fixture did not resume");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException(interrupted);
+                }
+            }
+        };
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var stale = pool.submit(() -> get(path));
+            try {
+                assertTrue(paused.await(10, TimeUnit.SECONDS));
+                assertEquals(503, get(path).statusCode());
+                assertEquals("PERMANENT_FAILURE", state(id, "DELIVERY"));
+                stores.delivery.objects.put(key, original);
+                var otherWorker = new ImageAssetService(repository, stores, manager);
+                otherWorker.revalidate(id, ImageStores.Area.DELIVERY);
+            } finally {
+                resume.countDown();
+            }
+            assertEquals(503, stale.get(10, TimeUnit.SECONDS).statusCode());
+        } finally {
+            stores.delivery.afterRead = () -> {};
+        }
+        assertEquals("VERIFIED", state(id, "DELIVERY"));
+        assertEquals(200, get(path).statusCode());
+    }
+
+    @Test
+    void latePendingWorkerFailureCannotOverwriteSuccessfulRetry() throws Exception {
+        UUID id = UUID.randomUUID();
+        byte[] bytes = png();
+        var paused = new CountDownLatch(1);
+        var resume = new CountDownLatch(1);
+        var first = new AtomicBoolean(true);
+        stores.staging.beforePut = () -> {
+            if (!first.compareAndSet(true, false)) return;
+            paused.countDown();
+            try {
+                if (!resume.await(10, TimeUnit.SECONDS)) throw new IOException("fixture did not resume");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IOException(interrupted);
+            }
+            throw new IOException("late transport failure");
+        };
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var outdated = pool.submit(() -> assertThrows(IOException.class, () -> stage(id, bytes)));
+            try {
+                assertTrue(paused.await(10, TimeUnit.SECONDS));
+                assertEquals("PENDING", state(id, "STAGING"));
+                var otherWorker = new ImageAssetService(repository, stores, manager);
+                otherWorker.stage(id, ImageAssetService.Source.USER_SUBMISSION, "submission:fixture", "image/png", bytes);
+            } finally {
+                resume.countDown();
+            }
+            assertEquals("late transport failure", outdated.get(10, TimeUnit.SECONDS).getMessage());
+        } finally {
+            stores.staging.beforePut = () -> {};
+        }
+        assertEquals("VERIFIED", state(id, "STAGING"));
+        assertEquals(1, stores.staging.writes.get(key(id, "STAGING")).get());
+    }
+
+    @Test
+    void malformedAndUnknownImagePathsFailWithoutReadingStorage() throws Exception {
+        UUID id = UUID.randomUUID();
+        var reads = new AtomicInteger();
+        stores.delivery.beforeRead = () -> reads.incrementAndGet();
+        try {
+            for (String path : java.util.List.of("1/not-a-uuid", "1/1-1-1-1-1", "abc/" + id, "-1/" + id,
+                    "9223372036854775808/" + id)) {
+                var response = get("/api/images/sakes/" + path);
+                assertEquals(400, response.statusCode(), path);
+                assertImageErrorHeaders(response);
+            }
+            for (String path : java.util.List.of(url(Long.MAX_VALUE, id), url(newSake(), id))) {
+                var response = get(path);
+                assertEquals(404, response.statusCode(), path);
+                assertImageErrorHeaders(response);
+            }
+            assertEquals(0, reads.get());
+        } finally {
+            stores.delivery.beforeRead = () -> {};
+        }
+    }
+
+    private static void assertImageErrorHeaders(HttpResponse<?> response) {
+        assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow());
+        assertEquals("nosniff", response.headers().firstValue("X-Content-Type-Options").orElseThrow());
+    }
+
+    private static ImageStorage.Payload damage(ImageStorage.Payload original, boolean bytes) {
+        byte[] changed = original.bytes().clone();
+        if (bytes) changed[0] ^= 1;
+        return new ImageStorage.Payload(original.contentType(), original.cacheControl(),
+                bytes ? original.declaredSha256() : "0".repeat(64), changed);
     }
 
     private long newSake() {
@@ -298,6 +500,7 @@ class ImageAssetMySqlTests {
         final Map<String, AtomicInteger> writes = new ConcurrentHashMap<>();
         volatile Probe beforePut = () -> {};
         volatile Probe beforeRead = () -> {};
+        volatile Probe afterRead = () -> {};
 
         @Override public boolean createIfAbsent(ObjectKey key, String mime, String hash, byte[] bytes) throws IOException {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
@@ -316,6 +519,7 @@ class ImageAssetMySqlTests {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
             beforeRead.run();
             var value = objects.get(key.value());
+            afterRead.run();
             if (value == null) return Optional.empty();
             if (value.bytes().length > maxBytes) throw new ReadLimitExceeded();
             return Optional.of(new Payload(value.contentType(), value.cacheControl(), value.declaredSha256(), value.bytes().clone()));

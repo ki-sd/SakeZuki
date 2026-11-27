@@ -56,18 +56,48 @@ public class ImageAssetService {
         try {
             var staging = storage(ImageStores.Area.STAGING);
             var delivery = storage(ImageStores.Area.DELIVERY);
-            var work = transaction.execute(status -> {
+            var source = transaction.execute(status -> {
                 var asset = assets.lockAsset(id);
                 assets.requireGrant(id);
-                var staged = assets.object(id, ImageStores.Area.STAGING);
-                var next = prepare(id, ImageStores.Area.DELIVERY, asset);
-                if (!staged.state().equals("VERIFIED") || !staged.key().equals(next.key().value())
-                        || !staged.version().equals(asset.version())) {
+                var staged = existing(id, ImageStores.Area.STAGING, asset);
+                if (!"VERIFIED".equals(staged.object().state())) {
                     throw new IllegalStateException("verified staging object required");
                 }
-                return next;
+                return staged;
             });
-            execute(work, () -> VerifiedImageStorage.copyVerified(staging, delivery, work.key(), work.media()));
+            VerifiedImageStorage.Copy copy;
+            try {
+                copy = VerifiedImageStorage.readForCopy(staging, source.key(), source.media());
+            } catch (IOException | ImageFailure failure) {
+                recordFailure(source, failure);
+                throw failure;
+            }
+            var destination = transaction.execute(status -> {
+                var asset = assets.lockAsset(id);
+                assets.requireGrant(id);
+                return prepare(id, ImageStores.Area.DELIVERY, asset);
+            });
+            execute(destination, () -> VerifiedImageStorage.storeCopy(delivery, copy));
+        } finally {
+            processing.release();
+        }
+    }
+
+    // A trusted operator may revalidate restored content. This path never puts or deletes an object.
+    public void revalidate(UUID id, ImageStores.Area area) throws IOException, ImageFailure {
+        enterProcessing();
+        try {
+            var storage = storage(area);
+            var work = transaction.execute(status -> {
+                var asset = assets.lockAsset(id);
+                if (area == ImageStores.Area.DELIVERY) assets.requireGrant(id);
+                var original = existing(id, area, asset);
+                if (!"PERMANENT_FAILURE".equals(original.object().state())) {
+                    throw new IllegalStateException("quarantined object required");
+                }
+                return new Work(assets.begin(original.object(), true), original.key(), original.media());
+            });
+            execute(work, () -> VerifiedImageStorage.readForCopy(storage, work.key(), work.media()));
         } finally {
             processing.release();
         }
@@ -76,35 +106,65 @@ public class ImageAssetService {
     private Work prepare(UUID id, ImageStores.Area area, ImageAssetRepository.Asset asset) {
         var key = ImageStorage.ObjectKey.forAsset(id, asset.version(), asset.transformed());
         assets.ensureObject(id, area, key.value(), asset.version());
+        var work = existing(id, area, asset);
+        if ("PERMANENT_FAILURE".equals(work.object().state())) {
+            throw new IllegalStateException("image object requires investigation");
+        }
+        return new Work(assets.begin(work.object(), false), work.key(), work.media());
+    }
+
+    private Work existing(UUID id, ImageStores.Area area, ImageAssetRepository.Asset asset) {
+        var key = ImageStorage.ObjectKey.forAsset(id, asset.version(), asset.transformed());
         var object = assets.object(id, area);
         if (!object.key().equals(key.value()) || !object.version().equals(asset.version())) {
             throw new IllegalStateException("image object intent conflict");
         }
-        if (object.state().equals("PERMANENT_FAILURE")) throw new IllegalStateException("image object requires investigation");
-        long attempt = object.state().equals("VERIFIED") ? 0 : assets.begin(object);
-        return new Work(object.id(), attempt, key, asset.transformed());
+        return new Work(object, key, asset.transformed());
     }
 
     private void execute(Work work, Transfer transfer) throws IOException, ImageFailure {
         try {
             transfer.run();
         } catch (IOException | ImageFailure failure) {
-            if (work.attempt() != 0) {
-                boolean retryable = failure instanceof IOException
-                        && !(failure instanceof ImageStorage.IntegrityMismatch || failure instanceof ImageStorage.ReadLimitExceeded);
-                try {
-                    transaction.executeWithoutResult(status -> assets.failed(work.id(), work.attempt(), retryable,
-                            retryable ? "storage_unavailable" : "integrity_or_payload_invalid"));
-                } catch (RuntimeException updateFailure) {
-                    failure.addSuppressed(updateFailure);
-                }
-            }
+            recordFailure(work, failure);
             throw failure;
         }
-        if (work.attempt() != 0 && !Boolean.TRUE.equals(transaction.execute(
-                status -> assets.verified(work.id(), work.attempt(), work.media())))) {
+        if (!Boolean.TRUE.equals(transaction.execute(status -> assets.verified(work.object(), work.media())))) {
             throw new IOException("image object attempt superseded");
         }
+    }
+
+    private void recordFailure(Work work, Exception failure) {
+        var object = work.object();
+        if ("PERMANENT_FAILURE".equals(object.state())) return;
+        boolean integrity = definitiveDamage(failure);
+        boolean missing = failure instanceof ImageStorage.ObjectMissing;
+        if ("VERIFIED".equals(object.state()) && !integrity && !missing) return;
+        try {
+            transaction.executeWithoutResult(status -> assets.failed(object.id(), object.attempt(), object.state(),
+                    integrity, failureCode(integrity, missing)));
+        } catch (RuntimeException updateFailure) {
+            failure.addSuppressed(updateFailure);
+        }
+    }
+
+    void reportPublicReadFailure(ImageAssetRepository.PublicImage image, IOException failure) {
+        boolean integrity = definitiveDamage(failure);
+        boolean missing = failure instanceof ImageStorage.ObjectMissing;
+        if (integrity || missing) {
+            assets.failed(image.objectId(), image.generation(), "VERIFIED", integrity, failureCode(integrity, missing));
+        }
+    }
+
+    private static boolean definitiveDamage(Exception failure) {
+        return failure instanceof ImageStorage.IntegrityMismatch || failure instanceof ImageStorage.ReadLimitExceeded
+                || failure instanceof ImageFailure imageFailure && (imageFailure.category() == ImageFailure.Category.INVALID_IMAGE
+                || imageFailure.category() == ImageFailure.Category.STORAGE_FAILED);
+    }
+
+    private static String failureCode(boolean integrity, boolean missing) {
+        if (integrity) return "integrity_or_payload_invalid";
+        return missing ? "object_missing" : "storage_unavailable";
     }
 
     private ImageStorage.Readable storage(ImageStores.Area area) throws IOException {
@@ -125,7 +185,7 @@ public class ImageAssetService {
         }
     }
 
-    private record Work(long id, long attempt, ImageStorage.ObjectKey key, ImageTransform.Info media) {}
+    private record Work(ImageAssetRepository.Stored object, ImageStorage.ObjectKey key, ImageTransform.Info media) {}
 
     @FunctionalInterface
     private interface Transfer {

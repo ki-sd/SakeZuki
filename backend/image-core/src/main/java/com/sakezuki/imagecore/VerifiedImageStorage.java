@@ -21,16 +21,27 @@ public final class VerifiedImageStorage {
         }
     }
 
-    public static boolean copyVerified(ImageStorage.Readable source, ImageStorage destination,
-                                       ImageStorage.ObjectKey key, ImageTransform.Info expected)
+    public static final class Copy {
+        private final ImageStorage.ObjectKey key;
+        private final ImageTransform.Info media;
+        private final byte[] bytes;
+
+        private Copy(ImageStorage.ObjectKey key, ImageTransform.Info media, byte[] bytes) {
+            this.key = key;
+            this.media = media;
+            this.bytes = bytes;
+        }
+    }
+
+    public static Copy readForCopy(ImageStorage.Readable source, ImageStorage.ObjectKey key, ImageTransform.Info expected)
             throws IOException, ImageFailure {
         byte[] bytes = readVerified(source, key, expected);
         ImageTransform.validateTransformed(expected, bytes);
-        try {
-            return store(destination, key, expected, bytes);
-        } catch (ImageStorage.ReadLimitExceeded ex) {
-            throw new ImageFailure(ImageFailure.Category.STORAGE_FAILED, "stored_object_integrity_mismatch");
-        }
+        return new Copy(key, expected, bytes);
+    }
+
+    public static boolean storeCopy(ImageStorage destination, Copy copy) throws IOException, ImageFailure {
+        return store(destination, copy.key, copy.media, copy.bytes);
     }
 
     private static boolean store(ImageStorage storage, ImageStorage.ObjectKey key, ImageTransform.Info media, byte[] bytes)
@@ -42,7 +53,7 @@ public final class VerifiedImageStorage {
             created = storage.createIfAbsent(key, media.mimeType(), media.sha256(), bytes);
             stored = storage.read(key, length);
         }
-        if (stored.isEmpty()) throw new IOException("stored object unavailable after write");
+        if (stored.isEmpty()) throw new ImageStorage.ObjectMissing();
         if (!verified(stored.get(), media)) {
             throw new ImageFailure(ImageFailure.Category.STORAGE_FAILED, "stored_object_integrity_mismatch");
         }
@@ -52,7 +63,7 @@ public final class VerifiedImageStorage {
     public static byte[] readVerified(ImageStorage.Readable storage, ImageStorage.ObjectKey key,
                                       ImageTransform.Info expected) throws IOException {
         if (!key.matches(expected)) throw new ImageStorage.IntegrityMismatch();
-        var payload = storage.readPayload(key, expected.byteLength()).orElseThrow(() -> new IOException("image missing"));
+        var payload = storage.readPayload(key, expected.byteLength()).orElseThrow(ImageStorage.ObjectMissing::new);
         byte[] bytes = payload.bytes();
         var info = new ImageStorage.ObjectInfo(payload.contentType(), payload.cacheControl(), payload.declaredSha256(),
                 ImageTransform.sha256(bytes), bytes.length);

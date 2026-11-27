@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sakezuki.backend.image.CatalogImageMapper">
+    <sql id="hasHistory">
+        EXISTS (SELECT 1 FROM SAKE_IMAGE h WHERE h.sake_no = s.no AND h.is_primary = TRUE)
+    </sql>
+
+    <sql id="publicUrl">
+        (SELECT p.image_url FROM PUBLIC_SAKE_IMAGE p WHERE p.active_primary_sake = s.no)
+    </sql>
+
+    <!-- Use the driving SAKE row. The public lookup runs only for rows with management history. -->
+    <sql id="catalogUrl">
+        CASE WHEN NOT EXISTS (SELECT 1 FROM SAKE_IMAGE) THEN s.image_url
+             WHEN <include refid="com.sakezuki.backend.image.CatalogImageMapper.hasHistory"/>
+             THEN <include refid="com.sakezuki.backend.image.CatalogImageMapper.publicUrl"/>
+             ELSE s.image_url END
+    </sql>
+
+    <select id="managedImages" resultType="com.sakezuki.backend.image.CatalogImageMapper$ManagedImage">
+        SELECT s.no AS sakeNo, <include refid="com.sakezuki.backend.image.CatalogImageMapper.publicUrl"/> AS imageUrl
+        FROM SAKE s
+        WHERE s.no IN
+        <foreach collection="numbers" item="number" open="(" separator="," close=")">
+            #{number}
+        </foreach>
+        AND <include refid="com.sakezuki.backend.image.CatalogImageMapper.hasHistory"/>
+    </select>
+</mapper>
