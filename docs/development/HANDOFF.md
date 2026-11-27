@@ -2,11 +2,11 @@
 
 저장소는 `ki-sd/SakeZuki`, 기준은 원격 `main`이다. [공통 규칙](../../AGENTS.md)의 시작 순서에 따라 필요한 문서를 읽고, 실제 브랜치·HEAD·작업 트리·원격 PR을 확인한다.
 
-- 기록 기준 main은 `91b24c2015aabf7798971c2d23812d0efb3375f4`이며 IMG-01 PR #7이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #7](https://github.com/ki-sd/SakeZuki/pull/7)
+- 기록 기준 main은 `192cf92f70b9c19b02163e9629779b4657b2cc1a`이며 스모크 실행기 PR #10이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #10](https://github.com/ki-sd/SakeZuki/pull/10)
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
-- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있으며, PR #8은 IMG-01 브랜치에 병합됐으며 이 기록 기준 main에는 없다.
+- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있다. IMG-02와 IMG-03A는 PR #9를 통해 main에 반영됐다.
 - [IMG-03A](IMG-03A_IMAGE_STORAGE.md)는 Tools에서 합성 이미지를 검증·변환하고 모의 저장 응답의 무결성을 확인했다. 다음은 IMG-03B의 DB 메타데이터·Flyway·백엔드 API이며, 실이미지 처리는 이용 허가와 상품 승인 확인이 필요하다.
-- PR #9로 IMG-02와 IMG-03A가 main에 반영됐다. [IMG-03A-IT](IMG-03A_IT_R2_SMOKE.md)는 Windows에서 개발 버킷과 실제 R2 호환성을 확인하는 단계이며 로컬 실행 결과가 남아 있다.
+- [IMG-03A-IT](IMG-03A_IT_R2_SMOKE.md)의 핵심 검증은 사용자의 Windows 실행에서 통과했다. 읽기 전용 권한 검증은 미실행이고 테스트 객체 정리 여부는 확인 대기다.
 - 운영 장애, 본인확인/PG·이미지 권리, 운영 SHA는 [현재 상태](PROJECT_STATE.md)에서 확인한다. 실키, 외부 API 호출, R2 실제 업로드, 배포 등은 [승인 범위](../../AGENTS.md)를 따른다.
 
 ## 중단 시 체크포인트
@@ -19,4 +19,4 @@
 
 ## 새 에이전트에 전달할 시작 문장
 
-> ki-sd/SakeZuki의 최신 main을 기준으로 AGENTS.md와 인수인계 문서를 읽고 IMG-01을 수행해 줘. 현재 브랜치와 PR을 확인한 뒤 DEV-01 기준선 기록을 확인하고 IMG-01의 미확인 원본 응답과 공식 이용 조건을 조사해 줘.
+> 최신 main과 열린 PR을 확인하고 AGENTS.md와 인수인계 문서를 읽은 뒤 IMG-03B를 시작해 줘. IMG-03A 저장 계약과 IMG-03A-IT 결과를 바탕으로 승인·권리 상태, 검증된 객체 키, 원본·변환본 메타데이터를 저장할 새 Flyway 마이그레이션과 백엔드 API를 설계해 줘.

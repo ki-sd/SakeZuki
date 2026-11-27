@@ -7,11 +7,11 @@
 | DEV-DOC / 개발 이관 문서 | DONE / 병합 완료 | main / [PR #5](https://github.com/ki-sd/SakeZuki/pull/5) | 공통 문서와 PR 템플릿 / 없음 / 다른 작업의 공통 문서 편집과 조율 |
 | DEV-01 / Cloud 기준선 | PARTIALLY READY | main / chore/dev-01-cloud-baseline | [환경 확인·검증](CLOUD_SETUP.md#dev-01-cloud-기준선) / CI 변경이 필요하면 별도 조율 |
 | IMG-01 / 장애·출처 분석 | BLOCKED / 원본 조회 대기 | main / docs/img-01-image-source-analysis | [자료 조사·표본](IMG-01_IMAGE_SOURCES.md) / 승인된 접속 환경 / 운영 데이터 및 소스 수정 없음 |
-| IMG-02 / 상품 매핑 | 검토 대기 / 실데이터 확인 대기 | IMG-01 / feat/img-02-product-mapping | Tools·개발 문서 / [PR #8](https://github.com/ki-sd/SakeZuki/pull/8) / [dry-run 계약](IMG-02_PRODUCT_MAPPING.md) |
-| IMG-03A / 검증·변환·저장 | 검토 대기 | IMG-02 / feat/img-03a-image-storage | Tools·CI / [저장 계약](IMG-03A_IMAGE_STORAGE.md) / 권리 및 운영 적용 별도 |
-| IMG-03A-IT / R2 실제 검증 | Windows 실행 대기 | IMG-03A / test/img-03a-r2-smoke | Tools / [실행·정리 절차](IMG-03A_IT_R2_SMOKE.md) / 개발 버킷만 |
+| IMG-02 / 상품 매핑 | 구현 병합 / 실데이터 확인 대기 | main | Tools·개발 문서 / [PR #8](https://github.com/ki-sd/SakeZuki/pull/8) / [dry-run 계약](IMG-02_PRODUCT_MAPPING.md) |
+| IMG-03A / 검증·변환·저장 | DONE / PR #9 병합 | main | Tools·CI / [저장 계약](IMG-03A_IMAGE_STORAGE.md) / 권리 및 운영 적용 별도 |
+| IMG-03A-IT / R2 실제 검증 | DONE / Windows 핵심 검증 통과 | main / PR #10 | Tools / [검증 기록](IMG-03A_IT_R2_SMOKE.md) / 읽기 전용 미실행·정리 미확인 |
 | IMG-03B / DB·Flyway·API | PLANNED | IMG-03A | Backend·Flyway / 승인·권리 원장 및 메타데이터 |
-| IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03A/B | Tools / 실제 데이터·비용·공개 전환은 별도 승인 |
+| IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03A/B | Tools / 실제 데이터·비용·공개 전환은 별도 승인 / SLF4J 로깅 개선 검토 |
 | UI-01 / 탐색 UI | PLANNED / 미배정 | main / 미생성 / 미등록 | frontend / 합성 이미지 사용 / 이미지 DTO·공통 컴포넌트·lockfile 조율 |
 
 작업 시작 시 직접 수정 영역과 공용 자원(AGENTS·Flyway 버전·DTO·인증/크레딧·환경변수·lockfile·CI·Compose·Jenkins)을 Issue/PR에서 조율한다. 겹치면 인터페이스를 합의하거나 순서를 정한다. 브랜치 하나에 주 개발자 한 명만 쓰며, 빈번한 진행 보고를 위해 이 문서를 매번 수정할 필요는 없다.
