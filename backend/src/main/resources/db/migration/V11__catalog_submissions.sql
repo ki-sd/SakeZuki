@@ -33,6 +33,7 @@ CREATE TABLE SUBMISSION_ATTACHMENT (
     UNIQUE (id, submission_id),
     UNIQUE (asset_id),
     INDEX (owner_no, created_at),
+    INDEX (owner_no, request_hash),
     FOREIGN KEY (owner_no) REFERENCES MEMBER(no),
     FOREIGN KEY (submission_id, owner_no) REFERENCES CATALOG_SUBMISSION(id, owner_no),
     FOREIGN KEY (asset_id) REFERENCES IMAGE_ASSET(id),

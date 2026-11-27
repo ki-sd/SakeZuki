@@ -36,6 +36,15 @@ class AttachmentRepository {
                 """).params(owner, key.toString()).query(AttachmentRepository::intent).optional();
     }
 
+    boolean hasLiveCopy(long owner, String hash) {
+        return sql.sql("""
+                SELECT id FROM SUBMISSION_ATTACHMENT WHERE owner_no=? AND request_hash=?
+                  AND status IN ('UPLOADING','RETRYABLE_FAILURE','READY')
+                  AND (submission_id IS NOT NULL OR expires_at > UTC_TIMESTAMP(6))
+                LIMIT 1
+                """).params(owner, hash).query(String.class).optional().isPresent();
+    }
+
     long recent(long owner) {
         return sql.sql("""
                 SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT

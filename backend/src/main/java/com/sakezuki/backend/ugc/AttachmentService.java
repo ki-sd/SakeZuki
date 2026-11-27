@@ -96,6 +96,9 @@ class AttachmentService {
                     || uploads.reservedBytes(owner) > limits.reservedBytes() - ImageTransform.MAX_BYTES) {
                 throw SubmissionService.quota();
             }
+            if (uploads.hasLiveCopy(owner, hash)) {
+                throw SubmissionErrors.error(409, "이미 등록 중이거나 보관 중인 첨부입니다.");
+            }
             uploads.insert(owner, UUID.randomUUID(), key, hash, ImageTransform.MAX_BYTES, limits.unlinkedHours());
         }
         return uploads.existing(owner, key).orElseThrow();

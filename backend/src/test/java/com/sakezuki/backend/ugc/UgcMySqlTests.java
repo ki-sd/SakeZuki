@@ -165,6 +165,7 @@ class UgcMySqlTests {
         assertEquals(201, result.statusCode(), string(result));
         assertEquals(node(result), node(upload(owner, pngKey, "image/png", png)));
         assertEquals(409, upload(owner, pngKey, "image/jpeg", image("jpeg")).statusCode());
+        assertEquals(409, upload(owner, UUID.randomUUID(), "image/png", png).statusCode());
         var jpeg = upload(owner, UUID.randomUUID(), "image/jpeg", image("jpeg"));
         assertEquals(201, jpeg.statusCode(), string(jpeg));
         String id = node(result).get("attachmentId").asString();
@@ -235,7 +236,14 @@ class UgcMySqlTests {
         var stored = staging.objects.get(objectKey);
         staging.objects.put(objectKey, new ImageStorage.Payload(stored.contentType(), stored.cacheControl(),
                 "0".repeat(64), stored.bytes()));
-        assertEquals(503, get(owner, node(retried).get("previewUrl").asString()).statusCode());
+        String preview = node(retried).get("previewUrl").asString();
+        db.execute("ALTER TABLE IMAGE_OBJECT ADD CONSTRAINT ugc_read_failure CHECK (asset_id <> '" + id
+                + "' OR storage_state <> 'PERMANENT_FAILURE')");
+        try {
+            assertEquals(503, get(owner, preview).statusCode());
+            assertEquals("VERIFIED", db.queryForObject("SELECT storage_state FROM IMAGE_OBJECT WHERE asset_id=?", String.class, id));
+        } finally { db.execute("ALTER TABLE IMAGE_OBJECT DROP CHECK ugc_read_failure"); }
+        assertEquals(503, get(owner, preview).statusCode());
         assertEquals(404, post(owner, ROOT, UUID.randomUUID(), draft(id)).statusCode());
         assertEquals("PERMANENT_FAILURE", db.queryForObject("SELECT storage_state FROM IMAGE_OBJECT WHERE asset_id=?", String.class, id));
     }
@@ -294,8 +302,13 @@ class UgcMySqlTests {
                         () -> another.upload(owner.no(), key, "image/png", png)).getStatusCode().value());
                 assertEquals(429, assertThrows(ResponseStatusException.class,
                         () -> another.upload(owner.no(), UUID.randomUUID(), "image/png", png)).getStatusCode().value());
+                db.update("UPDATE SUBMISSION_ATTACHMENT SET lease_until=UTC_TIMESTAMP(6)-INTERVAL 1 SECOND WHERE request_key=?",
+                        key.toString());
+                assertEquals(503, assertThrows(ResponseStatusException.class,
+                        () -> another.upload(owner.no(), key, "image/png", png)).getStatusCode().value());
             } finally { continueUpload.countDown(); }
-            assertEquals(201, first.get(15, TimeUnit.SECONDS).statusCode());
+            assertEquals(409, first.get(15, TimeUnit.SECONDS).statusCode());
+            assertEquals(201, upload(owner, key, "image/png", png).statusCode());
         } finally { staging.beforeWrite = () -> {}; }
         assertEquals(2, db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT WHERE owner_no=?", Integer.class, owner.no()));
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT WHERE owner_no=? AND status='READY'",
