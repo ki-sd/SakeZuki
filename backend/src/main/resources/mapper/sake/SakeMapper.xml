@@ -55,11 +55,12 @@
             s.name_kana,
             s.name_ko,
             s.sake_type,
-            s.image_url AS imageUrl,
+            image_policy.image_url AS imageUrl,
             br.name_ko AS breweryNameKo,
             ba.name_ko AS brandNameKo,
             br.prefecture
         FROM SAKE s
+        JOIN CATALOG_SAKE_IMAGE_URL image_policy ON image_policy.sake_no = s.no
         JOIN BREWERY br ON s.brewery_no=br.no
         LEFT JOIN BRAND ba ON s.brand_no=ba.no
         <where>
@@ -72,7 +73,7 @@
                 AND sake_type=#{sakeType}
             </if>
         </where>
-        ORDER BY s.image_url IS NOT NULL DESC,s.no DESC
+        ORDER BY image_policy.image_url IS NOT NULL DESC,s.no DESC
         LIMIT 12 OFFSET #{start}
     </select>
 
@@ -107,7 +108,7 @@
             s.sake_meter_value AS sakeMeterValue,
             s.acidity,
             s.alcohol_percentage AS alcoholPercentage,
-            s.image_url AS imageUrl,
+            image_policy.image_url AS imageUrl,
             ba.name_ja AS brandNameJa,
             ba.name_kana AS brandNameKana,
             ba.name_ko AS brandNameKo,
@@ -132,6 +133,7 @@
             br.latitude,
             br.longitude
         FROM SAKE s
+        JOIN CATALOG_SAKE_IMAGE_URL image_policy ON image_policy.sake_no = s.no
         LEFT JOIN BRAND ba ON s.brand_no=ba.no
         JOIN BREWERY br ON s.brewery_no=br.no
         WHERE s.no=#{no}
@@ -139,11 +141,12 @@
 
     <select id="searchSakeData" resultType="com.sakezuki.backend.sake.dto.SakeSearchResponse" parameterType="string">
         SELECT
-            no,
+            s.no,
             name_ko AS nameKo,
             name_ja AS nameJa,
-            image_url AS imageUrl
-        FROM SAKE
+            image_policy.image_url AS imageUrl
+        FROM SAKE s
+        JOIN CATALOG_SAKE_IMAGE_URL image_policy ON image_policy.sake_no = s.no
         WHERE name_ko LIKE CONCAT('%',#{search},'%')
             OR name_ja LIKE CONCAT('%',#{search},'%')
             OR name_kana LIKE CONCAT('%',#{search},'%')
@@ -155,8 +158,8 @@
                     OR name_kana LIKE CONCAT(#{search},'%') THEN 2
                 ELSE 3
             END,
-            image_url IS NOT NULL DESC,
-            no DESC
+            image_policy.image_url IS NOT NULL DESC,
+            s.no DESC
         LIMIT 10
     </select>
 

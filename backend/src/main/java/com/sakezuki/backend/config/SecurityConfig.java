@@ -66,6 +66,7 @@ public class SecurityConfig {
                                 org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.withDefaults().matcher("/api/auth/**"))))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/examples/recommendations", "/api/examples/recommendations/*").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/images/sakes/*/*").permitAll()
                         .requestMatchers("/api/auth/**", "/api/sake/**", "/api/health/ready", "/error").permitAll()
                         .requestMatchers("/api/recommend/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
