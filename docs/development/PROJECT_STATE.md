@@ -1,6 +1,6 @@
 # 현재 프로젝트 상태
 
-2026-11-27 KST 기록. 저장소 기준 `main@35029601ec34dc1f89768764bf5ec7fe14def01d`. 세션 시작 시 다시 확인한다.
+2026-11-27 KST 기록. 저장소 기준 `main@a1cd5dd64ff92c0e2fb3e200d26e971fc7e58b76`. 세션 시작 시 다시 확인한다.
 
 | 영역 | main 구현 및 상태 |
 | --- | --- |
@@ -20,4 +20,4 @@ DEV-01에서 게시된 Cloud 환경 복원과 개발 기준선을 확인했다. 
 
 OCI AlwaysFree-A1-2, Ubuntu 24.04 LTS ARM64, 1 OCPU / RAM 6GB / swap 2GB. Docker와 Compose, MySQL·Spring Boot·Next.js·Nginx가 기동했고 Flyway V1-V5 및 MySQL 영속 볼륨이 확인됐다. Backend HTTP 200/UP, frontend HTTP 200, SSH 터널로 내부 접근 가능하다고 사용자가 확인했다. 사케 10,337건 중 이미지 URL 보유 4,037건, 미보유 6,300건이다.
 
-운영 배포 SHA는 미확인이다. 이미지 URL 보유 수는 실제 표시 성공 수가 아니다. 원본 사이트 개편에 따른 주소 변경은 가설이다. 공개 도메인·HTTPS·운영 OAuth·Jenkins 연결은 미완료다. 운영 서버를 이번 개발 인수인계 작업에서 다시 검사하지 않았다. [OCI 배포 절차](../oci-public-deployment.md) · [후속 계획](ROADMAP.md)
+운영 배포 SHA는 미확인이다. 이미지 URL 보유 수는 실제 표시 성공 수가 아니다. IMG-01에서 Flyway 시드의 URL 보유 수를 재현했다. 원본 응답은 Cloud 프록시에서 차단돼 개편·권리 여부는 미확인이다. [IMG-01 조사](IMG-01_IMAGE_SOURCES.md) 공개 도메인·HTTPS·운영 OAuth·Jenkins 연결은 미완료다. 운영 서버를 이번 개발 인수인계 작업에서 다시 검사하지 않았다. [OCI 배포 절차](../oci-public-deployment.md) · [후속 계획](ROADMAP.md)
