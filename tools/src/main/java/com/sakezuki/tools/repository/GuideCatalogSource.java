@@ -10,25 +10,26 @@ enum GuideCatalogSource {
 
     private final String ownerPredicate;
     private final String register;
+    private final String verifyOwner;
 
     GuideCatalogSource(String table, String foreignKey) {
         // Match the ID actually stored by the legacy upsert, preserving its collation and spelling.
-        ownerPredicate = """
-                EXISTS (SELECT 1 FROM %1$s_SOURCE src
-                        WHERE src.%2$s = %1$s.no AND src.source_system = 'SAKE_GUIDE'
-                          AND src.external_key = CAST(%1$s.source_id AS CHAR CHARACTER SET utf8mb4)
-                              COLLATE utf8mb4_0900_bin)
+        String sameIdentity = """
+                src.%2$s = %1$s.no AND src.source_system = 'SAKE_GUIDE'
+                AND src.external_key = CAST(%1$s.source_id AS CHAR CHARACTER SET utf8mb4)
+                    COLLATE utf8mb4_0900_bin
                 """.formatted(table, foreignKey).strip();
+        ownerPredicate = "EXISTS (SELECT 1 FROM " + table + "_SOURCE src WHERE " + sameIdentity + ")";
+        // A current read avoids using an older REPEATABLE READ snapshot after an upsert.
+        verifyOwner = "SELECT 1 FROM " + table + " JOIN " + table + "_SOURCE src ON " + sameIdentity
+                + " WHERE " + table + ".no = ? FOR SHARE";
         register = """
                 INSERT INTO %1$s_SOURCE (%2$s, source_system, external_key)
                 SELECT no, 'SAKE_GUIDE', CAST(source_id AS CHAR CHARACTER SET utf8mb4)
                 FROM %1$s WHERE no = ?
                 ON DUPLICATE KEY UPDATE %2$s = %1$s_SOURCE.%2$s
                 """.formatted(table, foreignKey);
-        this.table = table;
     }
-
-    private final String table;
 
     String predicate() {
         return ownerPredicate;
@@ -52,8 +53,7 @@ enum GuideCatalogSource {
                 statement.setLong(1, no);
                 statement.executeUpdate();
             }
-            try (var statement = connection.prepareStatement(
-                    "SELECT 1 FROM " + table + " WHERE no = ? AND " + ownerPredicate)) {
+            try (var statement = connection.prepareStatement(verifyOwner)) {
                 statement.setLong(1, no);
                 try (var result = statement.executeQuery()) {
                     if (!result.next()) {

@@ -130,6 +130,28 @@ class GuideCatalogMySqlTests {
         }
     }
 
+    @Test
+    void recrawlSeesGuideMappingCommittedAfterRepeatableReadSnapshot() throws Exception {
+        try (var older = connect(); var writer = connect()) {
+            older.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            older.setAutoCommit(false);
+            long breweryNo = 0;
+            try {
+                assertEquals(0, scalar(older, "SELECT COUNT(*) FROM BREWERY_SOURCE WHERE external_key='RaceFixture'"));
+                var brewery = BreweryData.builder().sourceId("RaceFixture").nameJa("合成競合蔵").build();
+                breweryNo = new BreweryRepository(writer).save(brewery);
+                assertTrue(writer.getAutoCommit());
+                assertEquals(breweryNo, new BreweryRepository(older).save(brewery));
+            } finally {
+                older.rollback();
+                if (breweryNo != 0) {
+                    execute(writer, "DELETE FROM BREWERY_SOURCE WHERE brewery_no=" + breweryNo);
+                    execute(writer, "DELETE FROM BREWERY WHERE no=" + breweryNo);
+                }
+            }
+        }
+    }
+
     private static Connection connect() throws SQLException {
         String url = System.getenv("AUTH_TEST_JDBC_URL");
         assertNotNull(url);
