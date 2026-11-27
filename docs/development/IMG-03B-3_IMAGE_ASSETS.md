@@ -43,4 +43,4 @@ UGC-01은 제출·리비전·소유권, 용량·빈도 제한 및 비공개 미�
 | `(cd backend && bash ./gradlew --no-daemon bootJar dependencies --configuration runtimeClasspath)` | bootJar 성공. AWS Apache·Netty 전이 어댑터는 빠졌고 URLConnection, 기존 Google GenAI와 OkHttp 4.12.0은 유지됐다. |
 | `python3 scripts/test_public_containers.py` | 로컬 Docker 내부 `services.gradle.org` DNS 실패. 컨테이너 기동과 전체 GitHub Actions는 PR의 현재 HEAD 검사에서 확인한다. |
 
-단위·MySQL XML 159개에서 실패·오류·스킵은 모두 0개다. 실제 R2·외부 이미지·Gemini·운영 DB·OCI는 사용하지 않았다. Windows·ARM64 직접 검증과 이 PR의 독립 QA는 미실행이다. 독립 QA는 전환 없는 V10 적용, 대체·권리 재승인·철회 중 조회, PUT 후 DB 반영 실패, 스냅샷의 외부 URL 재노출 방지에 집중한다.
+단위·MySQL XML 159개에서 실패·오류·스킵은 모두 0개다. 첫 Chromium 전체 실행에서 8개가 통과했고 로그아웃 시나리오는 계정 페이지 표시 전에 공통 헤더를 클릭하여 URL 검사에서 실패했다. E2E에서 계정 제목 표시를 기다리도록 수정해 같은 로그아웃·리디렉션·세션 무효화 판정을 유지했다. 실제 R2·외부 이미지·Gemini·운영 DB·OCI는 사용하지 않았다. Windows·ARM64 직접 검증과 이 PR의 독립 QA는 미실행이다. 독립 QA는 전환 없는 V10 적용, 대체·권리 재승인·철회 중 조회, PUT 후 DB 반영 실패, 스냅샷의 외부 URL 재노출 방지에 집중한다.
