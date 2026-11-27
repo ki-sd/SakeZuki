@@ -36,7 +36,7 @@ enum GuideCatalogSource {
                 SELECT %s FROM %s_SOURCE FORCE INDEX (%s)
                 WHERE source_system = 'SAKE_GUIDE'
                   AND %s = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE %s
-                FOR UPDATE
+                FOR SHARE
                 """.formatted(foreignKey, table, index, keyColumn, collation);
         register = """
                 INSERT INTO %1$s_SOURCE (%2$s, source_system, external_key)
@@ -72,9 +72,20 @@ enum GuideCatalogSource {
         var checkpoint = ownsTransaction ? null : connection.setSavepoint();
         long no;
         try {
-            // Lock the legacy row first, then the requested index range with a current read.
-            // InnoDB protects missing keys in this range at the required isolation levels.
+            // Serialize Guide writers before any catalog write. Register before the range read
+            // so a fresh identity never upgrades its own missing-key gap lock into an insert.
+            try (var statement = connection.prepareStatement(
+                    "SELECT id FROM GUIDE_CATALOG_WRITE_MUTEX WHERE id = 1 FOR UPDATE");
+                 var lock = statement.executeQuery()) {
+                if (!lock.next()) {
+                    throw new SQLException("Guide catalog write mutex is missing");
+                }
+            }
             no = write.save();
+            try (var statement = connection.prepareStatement(register)) {
+                statement.setLong(1, no);
+                statement.executeUpdate();
+            }
             try (var statement = connection.prepareStatement(lockRequestedOwners)) {
                 statement.setString(1, requestedKey);
                 try (var owners = statement.executeQuery()) {
@@ -84,10 +95,6 @@ enum GuideCatalogSource {
                         }
                     }
                 }
-            }
-            try (var statement = connection.prepareStatement(register)) {
-                statement.setLong(1, no);
-                statement.executeUpdate();
             }
             try (var statement = connection.prepareStatement(verifyOwner)) {
                 statement.setLong(1, no);
@@ -103,6 +110,10 @@ enum GuideCatalogSource {
                 connection.releaseSavepoint(checkpoint);
             }
         } catch (SQLException | RuntimeException | Error failure) {
+            // InnoDB already rolled back the caller's entire deadlocked transaction.
+            if (!ownsTransaction && failure instanceof SQLException sql && CatalogTransaction.isDeadlock(sql)) {
+                throw failure;
+            }
             try {
                 if (ownsTransaction) {
                     connection.rollback();

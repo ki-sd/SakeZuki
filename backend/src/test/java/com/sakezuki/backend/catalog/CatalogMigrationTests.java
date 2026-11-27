@@ -31,12 +31,12 @@ class CatalogMigrationTests {
         ds = new DriverManagerDataSource(authUrl.replace("/sakezuki_auth_it", "/sakezuki_catalog_it"),
                 System.getenv("AUTH_TEST_DB_USER"), System.getenv("AUTH_TEST_DB_PASSWORD"));
         db = new JdbcTemplate(ds);
-        flyway("8").clean();
+        flyway("9").clean();
     }
 
     @Test
     void freshDatabaseMigratesAndBackfillsEverySeedIdentity() {
-        assertEquals(8, flyway("8").migrate().migrationsExecuted);
+        assertEquals(9, flyway("9").migrate().migrationsExecuted);
         assertCompleteBackfill();
     }
 
@@ -47,7 +47,7 @@ class CatalogMigrationTests {
         db.update("INSERT INTO RECOMMEND_SAKE(food,sake_no,reason) VALUES('fixture food',1,'fixture')");
         Map<String, List<Map<String, Object>>> before = PRESERVED.stream().collect(
                 Collectors.toMap(table -> table, table -> db.queryForList("SELECT * FROM " + table + " ORDER BY 1")));
-        assertEquals(3, flyway("8").migrate().migrationsExecuted);
+        assertEquals(4, flyway("9").migrate().migrationsExecuted);
         assertCompleteBackfill();
         before.forEach((table, rows) -> assertEquals(rows, db.queryForList("SELECT * FROM " + table + " ORDER BY 1"), table));
     }
@@ -58,7 +58,7 @@ class CatalogMigrationTests {
         try (var physical = ds.getConnection()) {
             var reused = new SingleConnectionDataSource(physical, true);
             db = new JdbcTemplate(reused);
-            var retry = Flyway.configure().dataSource(reused).target("8").load();
+            var retry = Flyway.configure().dataSource(reused).target("9").load();
             Long session = db.queryForObject("SELECT CONNECTION_ID()", Long.class);
             db.update("""
                     INSERT INTO SAKE_SOURCE (sake_no, source_system, external_key)
@@ -78,7 +78,7 @@ class CatalogMigrationTests {
                     """);
             assertEquals(session, db.queryForObject("SELECT CONNECTION_ID()", Long.class));
             retry.repair();
-            assertEquals(2, retry.migrate().migrationsExecuted);
+            assertEquals(3, retry.migrate().migrationsExecuted);
             assertEquals(session, db.queryForObject("SELECT CONNECTION_ID()", Long.class));
             assertCompleteBackfill();
         }

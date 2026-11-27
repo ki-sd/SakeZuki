@@ -410,7 +410,7 @@ class GuideCatalogMySqlTests {
         }
     }
 
-    private static Connection connect() throws SQLException {
+    static Connection connect() throws SQLException {
         String url = System.getenv("AUTH_TEST_JDBC_URL");
         assertNotNull(url);
         assertTrue(url.matches("jdbc:mysql://(?:localhost|127\\.0\\.0\\.1):3308/sakezuki_auth_it(?:\\?.*)?"));

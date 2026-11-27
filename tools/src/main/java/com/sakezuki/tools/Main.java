@@ -9,16 +9,14 @@ import com.sakezuki.tools.model.BrandData;
 import com.sakezuki.tools.model.BreweryData;
 import com.sakezuki.tools.model.SakeData;
 
-import com.sakezuki.tools.repository.BrandRepository;
-import com.sakezuki.tools.repository.BreweryRepository;
-import com.sakezuki.tools.repository.SakeRepository;
+import com.sakezuki.tools.repository.CatalogTransaction;
 
 import java.io.PrintStream;
 
 import java.nio.charset.StandardCharsets;
 
-import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 
 import java.util.Set;
 
@@ -457,6 +455,10 @@ public class Main {
                             + sourceId
                             + " | "
                             + e.getMessage()
+                            + (e instanceof SQLException sql
+                                ? " | SQLSTATE=" + sql.getSQLState() + " code=" + sql.getErrorCode()
+                                  + " suppressed=" + sql.getSuppressed().length
+                                : "")
             );
 
 
@@ -637,88 +639,11 @@ public class Main {
             SakeData sake,
             BreweryData brewery,
             BrandData brand
-    ) throws Exception {
+    ) throws SQLException {
+        CatalogTransaction.save(
+                () -> DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD),
+                sake, brewery, brand);
 
-
-        try (
-                Connection conn =
-                        DriverManager.getConnection(
-                                DB_URL,
-                                DB_USER,
-                                DB_PASSWORD
-                        )
-        ) {
-
-            conn.setAutoCommit(false);
-
-
-            try {
-
-                BreweryRepository breweryRepository =
-                        new BreweryRepository(
-                                conn
-                        );
-
-
-                BrandRepository brandRepository =
-                        new BrandRepository(
-                                conn
-                        );
-
-
-                SakeRepository sakeRepository =
-                        new SakeRepository(
-                                conn
-                        );
-
-
-                /*
-                 * ========================================
-                 * FK 순서
-                 *
-                 * BREWERY
-                 *    ↓
-                 * BRAND
-                 *    ↓
-                 * SAKE
-                 * ========================================
-                 */
-
-                long breweryNo =
-                        breweryRepository.save(
-                                brewery
-                        );
-
-
-                long brandNo =
-                        brandRepository.save(
-                                brand,
-                                breweryNo
-                        );
-
-
-                sakeRepository.save(
-                        sake,
-                        breweryNo,
-                        brandNo
-                );
-
-
-                conn.commit();
-
-
-            } catch (Exception e) {
-
-                conn.rollback();
-
-                throw e;
-
-
-            } finally {
-
-                conn.setAutoCommit(true);
-            }
-        }
     }
 
 
