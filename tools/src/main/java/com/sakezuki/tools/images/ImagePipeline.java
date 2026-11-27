@@ -1,5 +1,10 @@
 package com.sakezuki.tools.images;
 
+import com.sakezuki.imagecore.ImageFailure;
+import com.sakezuki.imagecore.ImageStorage;
+import com.sakezuki.imagecore.ImageTransform;
+import com.sakezuki.imagecore.VerifiedImageStorage;
+
 import java.io.IOException;
 import java.net.URI;
 import java.time.Clock;
@@ -64,36 +69,23 @@ public final class ImagePipeline {
             }
             var media = converted.transformed();
             var key = ImageStorage.ObjectKey.forImage(request.mapping().no(), media);
-            boolean created = storeVerified(storage, key, converted);
+            boolean created = VerifiedImageStorage.store(storage, key, converted);
             return new Result(Status.STORED_VERIFIED, "stored_object_verified", null,
                     new Asset(source.finalUrl(), ImageTransform.VERSION, Media.from(converted.original()),
                             Media.from(media), key, created));
         } catch (Failure ex) {
             return new Result(ex.status, ex.getMessage(), ex.retryAfter, null);
+        } catch (ImageFailure ex) {
+            Status status = switch (ex.category()) {
+                case IMAGE_ABSENT -> Status.IMAGE_ABSENT;
+                case INVALID_IMAGE -> Status.INVALID_IMAGE;
+                case TRANSFORM_FAILED -> Status.TRANSFORM_FAILED;
+                case STORAGE_FAILED -> Status.STORAGE_FAILED;
+            };
+            return new Result(status, ex.getMessage(), null, null);
         } catch (IOException ex) {
             return new Result(Status.STORAGE_FAILED, "storage_io_failure", null, null);
         }
     }
 
-    static boolean storeVerified(ImageStorage storage, ImageStorage.ObjectKey key, ImageTransform.Output converted)
-            throws IOException, Failure {
-        var media = converted.transformed();
-        int length = media.byteLength();
-        var stored = storage.read(key, length);
-        boolean created = false;
-        if (stored.isEmpty()) {
-            created = storage.createIfAbsent(key, media.mimeType(), media.sha256(), converted.bytes());
-            stored = storage.read(key, length);
-        }
-        if (stored.isEmpty() || !verified(stored.get(), media)) {
-            throw new Failure(Status.STORAGE_FAILED, "stored_object_integrity_mismatch");
-        }
-        return created;
-    }
-
-    private static boolean verified(ImageStorage.ObjectInfo stored, ImageTransform.Info expected) {
-        return stored.byteLength() == expected.byteLength() && expected.mimeType().equals(stored.contentType())
-                && ImageStorage.CACHE_CONTROL.equals(stored.cacheControl())
-                && expected.sha256().equals(stored.declaredSha256()) && expected.sha256().equals(stored.actualSha256());
-    }
 }

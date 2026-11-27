@@ -1,4 +1,4 @@
-package com.sakezuki.tools.images;
+package com.sakezuki.imagecore;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -21,69 +21,70 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.CRC32;
 
-import static com.sakezuki.tools.images.ImagePipeline.Status.*;
+import static com.sakezuki.imagecore.ImageFailure.Category.*;
 
-final class ImageTransform {
-    static final String VERSION = "image-v1";
-    static final String PNG = "image/png";
-    static final String JPEG = "image/jpeg";
-    static final int MAX_EDGE = 8192;
+public final class ImageTransform {
+    public static final int MAX_BYTES = 12 * 1024 * 1024;
+    public static final String VERSION = "image-v1";
+    public static final String PNG = "image/png";
+    public static final String JPEG = "image/jpeg";
+    public static final int MAX_EDGE = 8192;
     static final long MAX_PIXELS = 16_000_000;
     static final int TARGET_EDGE = 1200;
     private static final Set<String> PNG_RASTER_CHUNKS = Set.of("IHDR", "PLTE", "tRNS", "IDAT", "IEND");
     private static final byte[] PNG_HEADER = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
 
     public record Info(String mimeType, int byteLength, int width, int height, String sha256) {}
-    record Output(Info original, Info transformed, byte[] bytes) {}
+    public record Output(Info original, Info transformed, byte[] bytes) {}
 
     private ImageTransform() {}
 
-    static String requireMime(String header) throws ImagePipeline.Failure {
+    public static String requireMime(String header) throws ImageFailure {
         String mime = header == null ? "" : header.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
         if (!mime.equals(PNG) && !mime.equals(JPEG)) {
-            throw new ImagePipeline.Failure(INVALID_IMAGE, "unsupported_image_content_type");
+            throw new ImageFailure(INVALID_IMAGE, "unsupported_image_content_type");
         }
         return mime;
     }
 
-    static Output convert(String mime, byte[] bytes, Set<String> placeholderHashes) throws ImagePipeline.Failure {
+    public static Output convert(String mime, byte[] bytes, Set<String> placeholderHashes) throws ImageFailure {
         mime = requireMime(mime);
-        if (bytes.length > SecureImageDownload.MAX_BYTES) {
-            throw new ImagePipeline.Failure(INVALID_IMAGE, "download_byte_limit");
+        if (bytes.length > MAX_BYTES) {
+            throw new ImageFailure(INVALID_IMAGE, "download_byte_limit");
         }
         byte[] decodeBytes = validateContainer(mime, bytes);
         String sourceHash = sha256(bytes);
         if (placeholderHashes.contains(sourceHash)) {
-            throw new ImagePipeline.Failure(IMAGE_ABSENT, "known_placeholder_sha256");
+            throw new ImageFailure(IMAGE_ABSENT, "known_placeholder_sha256");
         }
         BufferedImage image = decode(mime, decodeBytes);
         var original = new Info(mime, bytes.length, image.getWidth(), image.getHeight(), sourceHash);
         try {
             BufferedImage resized = resize(image, mime.equals(PNG) && image.getColorModel().hasAlpha());
             byte[] output = encode(resized, mime);
-            if (output.length == 0 || output.length > SecureImageDownload.MAX_BYTES) {
+            if (output.length == 0 || output.length > MAX_BYTES) {
                 throw new IOException("converted image exceeds size limit");
             }
             return new Output(original,
                     new Info(mime, output.length, resized.getWidth(), resized.getHeight(), sha256(output)), output);
         } catch (IOException | RuntimeException ex) {
-            throw new ImagePipeline.Failure(TRANSFORM_FAILED, "image_encoding_failed");
+            throw new ImageFailure(TRANSFORM_FAILED, "image_encoding_failed");
         }
     }
 
-    private static byte[] validateContainer(String mime, byte[] bytes) throws ImagePipeline.Failure {
+    private static byte[] validateContainer(String mime, byte[] bytes) throws ImageFailure {
         if (mime.equals(JPEG)) {
             if (bytes.length < 5 || bytes[0] != (byte) 0xff || bytes[1] != (byte) 0xd8
                     || bytes[2] != (byte) 0xff || bytes[bytes.length - 2] != (byte) 0xff
                     || bytes[bytes.length - 1] != (byte) 0xd9) {
-                throw new ImagePipeline.Failure(INVALID_IMAGE, "invalid_jpeg_signature_or_end");
+                throw new ImageFailure(INVALID_IMAGE, "invalid_jpeg_signature_or_end");
             }
             return bytes;
         }
         var data = ByteBuffer.wrap(bytes);
         for (byte expected : PNG_HEADER) {
             if (!data.hasRemaining() || data.get() != expected) {
-                throw new ImagePipeline.Failure(INVALID_IMAGE, "invalid_png_signature");
+                throw new ImageFailure(INVALID_IMAGE, "invalid_png_signature");
             }
         }
         // Strip nonessential chunks before the decoder sees input, including compressed metadata.
@@ -120,13 +121,13 @@ final class ImageTransform {
                 return raster.toByteArray();
             }
         }
-        throw new ImagePipeline.Failure(INVALID_IMAGE, "invalid_or_animated_png");
+        throw new ImageFailure(INVALID_IMAGE, "invalid_or_animated_png");
     }
 
-    private static BufferedImage decode(String mime, byte[] bytes) throws ImagePipeline.Failure {
+    private static BufferedImage decode(String mime, byte[] bytes) throws ImageFailure {
         var readers = ImageIO.getImageReadersByFormatName(mime.equals(PNG) ? "png" : "jpeg");
         if (!readers.hasNext()) {
-            throw new ImagePipeline.Failure(TRANSFORM_FAILED, "image_reader_unavailable");
+            throw new ImageFailure(TRANSFORM_FAILED, "image_reader_unavailable");
         }
         ImageReader reader = readers.next();
         var warning = new AtomicBoolean();
@@ -135,15 +136,15 @@ final class ImageTransform {
             reader.setInput(stream, true, true);
             int width = reader.getWidth(0), height = reader.getHeight(0);
             if (width <= 0 || height <= 0 || width > MAX_EDGE || height > MAX_EDGE || (long) width * height > MAX_PIXELS) {
-                throw new ImagePipeline.Failure(INVALID_IMAGE, "image_resolution_limit");
+                throw new ImageFailure(INVALID_IMAGE, "image_resolution_limit");
             }
             BufferedImage image = reader.read(0);
             if (image == null || warning.get() || image.getWidth() != width || image.getHeight() != height) {
-                throw new ImagePipeline.Failure(INVALID_IMAGE, "image_decode_warning_or_mismatch");
+                throw new ImageFailure(INVALID_IMAGE, "image_decode_warning_or_mismatch");
             }
             return image;
         } catch (IOException | RuntimeException ex) {
-            throw new ImagePipeline.Failure(INVALID_IMAGE, "image_decode_failed");
+            throw new ImageFailure(INVALID_IMAGE, "image_decode_failed");
         } finally {
             reader.dispose();
         }
@@ -185,7 +186,7 @@ final class ImageTransform {
         return bytes.toByteArray();
     }
 
-    static String sha256(byte[] bytes) {
+    public static String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (NoSuchAlgorithmException ex) {

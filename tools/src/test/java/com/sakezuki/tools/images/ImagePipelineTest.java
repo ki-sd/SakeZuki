@@ -1,5 +1,7 @@
 package com.sakezuki.tools.images;
 
+import com.sakezuki.imagecore.ImageStorage;
+import com.sakezuki.imagecore.ImageTransform;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -169,7 +171,7 @@ class ImagePipelineTest {
         assertEquals(INVALID_IMAGE, pipeline(authority(grant()), (u, ip) -> response(200,
                 Map.of("Content-Type", "image/png", "Content-Length", "999999999"), new byte[0]), store).process(REQUEST).status());
         assertEquals(INVALID_IMAGE, pipeline(authority(grant()), (u, ip) -> success("image/png",
-                new byte[SecureImageDownload.MAX_BYTES + 1]), store).process(REQUEST).status());
+                new byte[ImageTransform.MAX_BYTES + 1]), store).process(REQUEST).status());
         assertEquals(INVALID_IMAGE, pipeline(authority(grant()), (u, ip) -> response(200,
                 Map.of("Content-Type", "image/png", "Content-Encoding", "gzip"), new byte[0]), store).process(REQUEST).status());
         assertEquals(0, store.writes);

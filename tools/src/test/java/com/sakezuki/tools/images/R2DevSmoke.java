@@ -1,9 +1,13 @@
 package com.sakezuki.tools.images;
 
+import com.sakezuki.imagecore.ImageStorage;
+import com.sakezuki.imagecore.ImageTransform;
+import com.sakezuki.imagecore.R2ImageStorage;
+import com.sakezuki.imagecore.VerifiedImageStorage;
 import software.amazon.awssdk.core.interceptor.Context;
 import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
-import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.core.exception.SdkServiceException;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -114,16 +118,16 @@ public final class R2DevSmoke {
         counts.createdBytes += output.transformed().byteLength();
         record(manifest, "CREATED", item);
         int putCount = counts.puts;
-        check(!ImagePipeline.storeVerified(storage, item.key(), output), "duplicate_path_attempted_create");
+        check(!VerifiedImageStorage.store(storage, item.key(), output), "duplicate_path_attempted_create");
         check(counts.puts == putCount, "duplicate_path_sent_put");
 
         var repeated = ImageTransform.convert(output.original().mimeType(), item.original(), Set.of());
         check(repeated.transformed().equals(output.transformed()), "repeat_transform_mismatch");
-        check(!ImagePipeline.storeVerified(storage, item.key(), repeated) && counts.puts == putCount,
+        check(!VerifiedImageStorage.store(storage, item.key(), repeated) && counts.puts == putCount,
                 "repeat_processing_not_deduplicated");
         int before412 = counts.preconditionFailures;
         check(!put(storage, item) && counts.preconditionFailures == before412 + 1, "expected_http_412");
-        check(!ImagePipeline.storeVerified(storage, item.key(), output), "post_412_object_not_reused");
+        check(!VerifiedImageStorage.store(storage, item.key(), output), "post_412_object_not_reused");
         int beforeBadPayload = counts.puts;
         byte[] corrupted = output.bytes().clone();
         corrupted[0] ^= 1;
@@ -186,7 +190,7 @@ public final class R2DevSmoke {
 
     private static int s3Status(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-            if (cause instanceof S3Exception s3) {
+            if (cause instanceof SdkServiceException s3) {
                 return s3.statusCode();
             }
         }

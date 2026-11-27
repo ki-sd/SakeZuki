@@ -80,3 +80,9 @@ Antigravity의 대상은 `005b437fa3070f002421b873ef0c62ba23e62b95`였다. 이�
 - **로컬 검증.** 코드 `5415c9aa94256c8de0ff24145be2d9209180a74b`에서 `cd tools && bash ./gradlew --no-daemon cleanTest test` 및 루트의 `python3 scripts/test_auth_integration.py`를 실행했다. Backend 기본 28·MySQL 28, Tools 기본 72·MySQL 17개가 통과했다. 초기 마이그레이션, V5 업그레이드, V7 동일 세션 복구, 이전 A·B, 독립 출처 경쟁, 다중 행 롤백을 포함한다.
 - **동시성 증거.** 3스레드 × 15라운드에서 첫 시도 45회, 교착 0회, 재시도 0회, 성공 45·실패 0건이다. 동일 키·대소문자 변형 재수집 및 신규 저장 경쟁을 추가한 뒤 카탈로그 3종과 출처 3종 각각 46건이 정확히 대응했다. REPEATABLE READ·SERIALIZABLE 모두 두 번째 쓰기가 upsert 전에 대기했다. 실제 1205 주입에서는 첫 연결을 닫고 다른 물리 연결로 재시도해 총 2회 시도·1회 재시도로 성공했다.
 - **인계·잔여 위험.** Antigravity는 새 PR HEAD에서 같은 갭 교착의 전후 비교, 두 격리 수준의 첫 쓰기 전 잠금, 독립 등록과 출처 A·B, 실물 1205 및 1213 예외 보존을 집중 재검증한다. 새 독립 판정은 대기다. V9 적용 후 새 Tools를 시작하고, 직접 SQL 원장 쓰기와 구버전 Tools는 기존 운영 차단 정책을 적용한다. 이 경계를 따르지 않는 쓰기는 여전히 잠금 경합을 일으킬 수 있다. 운영 DB·R2·Gemini·외부 수집은 실행하지 않았다.
+
+### 최종 독립 QA 및 병합
+
+사용자가 제공한 3차 Antigravity 기록은 검토 시작·종료가 동일한 `143f40159a2cdfb28a4aaed5fe8eed880bbeab39`에 **PASS**를 부여했다. Tools 기본 72, Backend 기본 28, Backend MySQL 28, Tools MySQL 17개로 총 145개가 통과했으며 실패·오류·스킵은 0개였다. 독립 동시성 프로브는 48/48 성공, 교착·타임아웃·재시도 0회였다. 혼합 경합 이후 카탈로그 3종과 출처 3종 각각 46건이 일치했다. 별도로 실제 MySQL 1205를 주입해 새 물리 연결에서 전체 트랜잭션 재시도에 성공했다. 기존 QA 지적 7개는 모두 RESOLVED였고 병합 차단 결함은 0개였다.
+
+별도의 원격 증거로 같은 HEAD의 GitHub Actions run 46011713179가 전체 성공했다. PR #13은 `ea1f42d27811808a26e9eaccf43f324dd841157f`로 main에 병합된 것을 확인했다. 이 기록은 IMG-03B-1에 해당하며 IMG-03B-2의 독립 QA를 증명하지 않는다. [PR #13](https://github.com/ki-sd/SakeZuki/pull/13) · [원격 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46011713179)

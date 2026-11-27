@@ -9,8 +9,8 @@
 | IMG-02 / P1 | 신규 상품 식별자 매핑 · 구현 병합 | 합성 입력으로 dry-run 구현·검증. 실제 링크·상품 변형 및 이용 범위 확인 대기 | [IMG-02 계약](IMG-02_PRODUCT_MAPPING.md) · 미적용 |
 | IMG-03A / P1 | 이미지 검증·변환·Object Storage · DONE | IMG-02 의존. 합성 이미지·모의 HTTP/S3 검증 | [이미지 저장 계약](IMG-03A_IMAGE_STORAGE.md) · 미적용 |
 | IMG-03A-IT / P1 | Windows 개발 버킷 R2 스모크 · DONE | 핵심 검증 완료. 읽기 전용 권한 미실행, 테스트 객체 정리 미확인 | [검증 기록](IMG-03A_IT_R2_SMOKE.md) · 개발 버킷 |
-| IMG-03B-1 / P1 | 카탈로그 출처·레거시 호환성 · IN_REVIEW | 출처 FK, backfill, Tools 경계 | [전환 기록](IMG-03B-1_CATALOG_SOURCES.md) · 미적용 |
-| IMG-03B-2 / P1 | Tools·Backend 공통 이미지 처리 모듈 · PLANNED | IMG-03B-1 이후. Gradle·Docker 호환 검증 | 미등록 · 미적용 |
+| IMG-03B-1 / P1 | 카탈로그 출처·레거시 호환성 · DONE | 출처 FK, backfill, Tools 경계 | [전환 기록](IMG-03B-1_CATALOG_SOURCES.md) · 미적용 |
+| IMG-03B-2 / P1 | Tools·Backend 공통 이미지 처리 모듈 · IN_REVIEW | IMG-03B-1 이후. Gradle·Docker 호환 검증 | [모듈 기록](IMG-03B-2_IMAGE_CORE.md) · 미적용 |
 | IMG-03B-3 / P1 | 이미지 자산 메타데이터·Backend 이미지 제공 · PLANNED | IMG-03B-2 이후. 자산·권리·헤더 계약 | 미등록 · 미적용 |
 | IMG-03C / P1 | 마이그레이션 실행기·멱등성·실패 복구·롤백 · PLANNED | IMG-03B-3 공통 이미지 자산 사용. 실제 데이터는 권리 및 승인 필요. SLF4J 개선 검토 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
 | UGC-01 / P1 | 사용자 제보 스키마 및 Backend API · PLANNED | IMG-03B-3. 제출, 리비전, 첨부, 소유자 API 및 제한 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
