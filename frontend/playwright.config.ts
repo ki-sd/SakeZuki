@@ -11,5 +11,14 @@ export default defineConfig({
         trace: "off", // Authentication responses and cookies must not be written to a trace archive.
         screenshot: "only-on-failure",
     },
-    projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+    projects: [{
+        name: "chromium",
+        use: {
+            ...devices["Desktop Chrome"],
+            // The integration fixtures use loopback and may contain legacy external image URLs.
+            launchOptions: {
+                args: ["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost"],
+            },
+        },
+    }],
 });

@@ -84,6 +84,28 @@ class CatalogMigrationTests {
         }
     }
 
+    @Test
+    void v9UpgradePreservesCatalogRowsWithoutInventingImageHistory() {
+        assertEquals(9, flyway("9").migrate().migrationsExecuted);
+        Map<String, List<Map<String, Object>>> before = PRESERVED.stream().collect(
+                Collectors.toMap(table -> table, table -> db.queryForList("SELECT * FROM " + table + " ORDER BY 1")));
+        assertEquals(1, flyway("10").migrate().migrationsExecuted);
+        before.forEach((table, rows) -> assertEquals(rows, db.queryForList("SELECT * FROM " + table + " ORDER BY 1"), table));
+        assertEquals(10_337, db.queryForObject("""
+                SELECT COUNT(*) FROM SAKE s
+                WHERE NOT EXISTS (SELECT 1 FROM SAKE_IMAGE h WHERE h.sake_no=s.no)
+                """, Integer.class));
+        assertCompleteBackfill();
+    }
+
+    @Test
+    void freshDatabaseMigratesThroughImageAssets() {
+        assertEquals(10, flyway("10").migrate().migrationsExecuted);
+        assertCompleteBackfill();
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM IMAGE_ASSET", Integer.class));
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM PUBLIC_SAKE_IMAGE", Integer.class));
+    }
+
     private void assertCompleteBackfill() {
         assertEquals(10_337, count("SAKE"));
         for (String table : CATALOG) {

@@ -20,7 +20,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
-public final class R2ImageStorage implements ImageStorage, AutoCloseable {
+public final class R2ImageStorage implements ImageStorage.Readable, AutoCloseable {
     private final S3Client client;
     private final String bucket;
 
@@ -38,14 +38,18 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
         if (!"auto".equals(region)) {
             throw new IllegalArgumentException("R2_REGION must be auto");
         }
+        return connectEndpoint(URI.create(endpoint), bucket, region, accessKey, secretKey, observer, UrlConnectionHttpClient.builder());
+    }
+
+    static R2ImageStorage connectEndpoint(URI endpoint, String bucket, String region, String accessKey,
+                                           String secretKey, ExecutionInterceptor observer, UrlConnectionHttpClient.Builder http) {
         S3Client client = S3Client.builder()
-                .endpointOverride(URI.create(endpoint)).region(Region.of(region)).forcePathStyle(true)
+                .endpointOverride(endpoint).region(Region.of(region)).forcePathStyle(true)
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
                         accessKey, secretKey)))
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
-                .httpClientBuilder(UrlConnectionHttpClient.builder()
-                        .connectionTimeout(Duration.ofSeconds(3)).socketTimeout(Duration.ofSeconds(10)))
+                .httpClientBuilder(http.connectionTimeout(Duration.ofSeconds(3)).socketTimeout(Duration.ofSeconds(10)))
                 .overrideConfiguration(c -> {
                     c.apiCallTimeout(Duration.ofSeconds(40)).apiCallAttemptTimeout(Duration.ofSeconds(15));
                     if (observer != null) {
@@ -63,11 +67,19 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
 
     @Override
     public boolean createIfAbsent(ObjectKey key, String contentType, String sha256, byte[] bytes) throws IOException {
-        if (bytes.length == 0 || bytes.length > ImageTransform.MAX_BYTES
-                || !ImageTransform.sha256(bytes).equals(sha256)
-                || !(ImageTransform.PNG.equals(contentType) && key.value().endsWith("/" + sha256 + ".png")
-                || ImageTransform.JPEG.equals(contentType) && key.value().endsWith("/" + sha256 + ".jpg"))) {
+        if (bytes.length == 0 || bytes.length > ImageTransform.MAX_BYTES) {
+            throw new IOException("invalid object payload length");
+        }
+        // One owned array is used for validation, digest and the synchronous SDK upload.
+        bytes = bytes.clone();
+        if (!(ImageTransform.PNG.equals(contentType) || ImageTransform.JPEG.equals(contentType))
+                || !key.matches(contentType, sha256) || !ImageTransform.sha256(bytes).equals(sha256)) {
             throw new IOException("invalid object payload");
+        }
+        try {
+            ImageTransform.decodeTransformed(contentType, bytes);
+        } catch (ImageFailure ex) {
+            throw new IOException("invalid object raster", ex);
         }
         try {
             client.putObject(PutObjectRequest.builder().bucket(bucket).key(key.value())
@@ -86,6 +98,12 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
 
     @Override
     public Optional<ObjectInfo> read(ObjectKey key, int maxBytes) throws IOException {
+        return readPayload(key, maxBytes).map(payload -> new ObjectInfo(payload.contentType(), payload.cacheControl(),
+                payload.declaredSha256(), ImageTransform.sha256(payload.bytes()), payload.bytes().length));
+    }
+
+    @Override
+    public Optional<Payload> readPayload(ObjectKey key, int maxBytes) throws IOException {
         if (maxBytes <= 0 || maxBytes > ImageTransform.MAX_BYTES) {
             throw new IOException("invalid object read limit");
         }
@@ -93,15 +111,19 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
             var response = input.response();
             if (response.contentLength() != null && response.contentLength() > maxBytes) {
                 input.abort();
-                throw new IOException("stored object exceeds verification limit");
+                throw new ReadLimitExceeded();
             }
-            byte[] bytes = input.readNBytes(maxBytes + 1);
-            if (bytes.length > maxBytes) {
+            byte[] bytes = new byte[maxBytes];
+            int count = input.readNBytes(bytes, 0, maxBytes);
+            if (input.read() != -1) {
                 input.abort();
-                throw new IOException("stored object exceeds verification limit");
+                throw new ReadLimitExceeded();
             }
-            return Optional.of(new ObjectInfo(response.contentType(), response.cacheControl(),
-                    response.metadata().get("sha256"), ImageTransform.sha256(bytes), bytes.length));
+            if (response.contentLength() != null && response.contentLength() != count) {
+                throw new IOException("incomplete stored object");
+            }
+            return Optional.of(new Payload(response.contentType(), response.cacheControl(),
+                    response.metadata().get("sha256"), count == maxBytes ? bytes : java.util.Arrays.copyOf(bytes, count)));
         } catch (S3Exception ex) {
             if (ex.statusCode() == 404 && !"NoSuchBucket".equals(
                     ex.awsErrorDetails() == null ? null : ex.awsErrorDetails().errorCode())) {

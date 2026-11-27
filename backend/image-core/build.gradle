@@ -18,7 +18,10 @@ repositories {
 dependencies {
     def awsVersion = '2.42.12'
     api "software.amazon.awssdk:sdk-core:${awsVersion}"
-    implementation "software.amazon.awssdk:s3:${awsVersion}"
+    implementation("software.amazon.awssdk:s3:${awsVersion}") {
+        exclude group: 'software.amazon.awssdk', module: 'apache-client'
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
     implementation "software.amazon.awssdk:url-connection-client:${awsVersion}"
     testImplementation platform('org.junit:junit-bom:6.0.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'

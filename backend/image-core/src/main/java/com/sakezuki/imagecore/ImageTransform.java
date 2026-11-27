@@ -35,7 +35,21 @@ public final class ImageTransform {
     private static final byte[] PNG_HEADER = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
 
     public record Info(String mimeType, int byteLength, int width, int height, String sha256) {}
-    public record Output(Info original, Info transformed, byte[] bytes) {}
+    public static final class Output {
+        private final Info original;
+        private final Info transformed;
+        private final byte[] bytes;
+
+        private Output(Info original, Info transformed, byte[] bytes) {
+            this.original = original;
+            this.transformed = transformed;
+            this.bytes = bytes; // Encoder-owned array. Never exposed to callers.
+        }
+
+        public Info original() { return original; }
+        public Info transformed() { return transformed; }
+        public byte[] bytes() { return bytes.clone(); }
+    }
 
     private ImageTransform() {}
 
@@ -49,15 +63,16 @@ public final class ImageTransform {
 
     public static Output convert(String mime, byte[] bytes, Set<String> placeholderHashes) throws ImageFailure {
         mime = requireMime(mime);
-        if (bytes.length > MAX_BYTES) {
+        if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES) {
             throw new ImageFailure(INVALID_IMAGE, "download_byte_limit");
         }
+        bytes = bytes.clone();
         byte[] decodeBytes = validateContainer(mime, bytes);
         String sourceHash = sha256(bytes);
         if (placeholderHashes.contains(sourceHash)) {
             throw new ImageFailure(IMAGE_ABSENT, "known_placeholder_sha256");
         }
-        BufferedImage image = decode(mime, decodeBytes);
+        BufferedImage image = decode(mime, decodeBytes, MAX_EDGE);
         var original = new Info(mime, bytes.length, image.getWidth(), image.getHeight(), sourceHash);
         try {
             BufferedImage resized = resize(image, mime.equals(PNG) && image.getColorModel().hasAlpha());
@@ -70,6 +85,18 @@ public final class ImageTransform {
         } catch (IOException | RuntimeException ex) {
             throw new ImageFailure(TRANSFORM_FAILED, "image_encoding_failed");
         }
+    }
+
+    static void validateTransformed(Info expected, byte[] bytes) throws ImageFailure {
+        BufferedImage image = decodeTransformed(expected.mimeType(), bytes);
+        if (image.getWidth() != expected.width() || image.getHeight() != expected.height()) {
+            throw new ImageFailure(INVALID_IMAGE, "transformed_resolution_mismatch");
+        }
+    }
+
+    static BufferedImage decodeTransformed(String mime, byte[] bytes) throws ImageFailure {
+        mime = requireMime(mime);
+        return decode(mime, validateContainer(mime, bytes), TARGET_EDGE);
     }
 
     private static byte[] validateContainer(String mime, byte[] bytes) throws ImageFailure {
@@ -124,7 +151,7 @@ public final class ImageTransform {
         throw new ImageFailure(INVALID_IMAGE, "invalid_or_animated_png");
     }
 
-    private static BufferedImage decode(String mime, byte[] bytes) throws ImageFailure {
+    private static BufferedImage decode(String mime, byte[] bytes, int maxEdge) throws ImageFailure {
         var readers = ImageIO.getImageReadersByFormatName(mime.equals(PNG) ? "png" : "jpeg");
         if (!readers.hasNext()) {
             throw new ImageFailure(TRANSFORM_FAILED, "image_reader_unavailable");
@@ -135,7 +162,7 @@ public final class ImageTransform {
         try (var stream = new MemoryCacheImageInputStream(new ByteArrayInputStream(bytes))) {
             reader.setInput(stream, true, true);
             int width = reader.getWidth(0), height = reader.getHeight(0);
-            if (width <= 0 || height <= 0 || width > MAX_EDGE || height > MAX_EDGE || (long) width * height > MAX_PIXELS) {
+            if (width <= 0 || height <= 0 || width > maxEdge || height > maxEdge || (long) width * height > MAX_PIXELS) {
                 throw new ImageFailure(INVALID_IMAGE, "image_resolution_limit");
             }
             BufferedImage image = reader.read(0);

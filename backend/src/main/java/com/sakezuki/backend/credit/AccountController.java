@@ -18,6 +18,7 @@ public class AccountController {
     private final IdentityService verification;
     private final IdentityProperties policy;
     private final CreditProperties creditPolicy;
+    private final PaidRecommendationService recommendations;
     public record Consent(String termsVersion, String privacyVersion) {}
     public record Proof(String requestId, String proof) {}
     public record Condition(String kind, String food, Long sakeNo) {}
@@ -58,7 +59,7 @@ public class AccountController {
     public ResponseEntity<String> detail(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
         var request = credits.byId(Long.valueOf(jwt.getSubject()), id);
         if (request == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "추천 기록을 찾을 수 없습니다.");
-        String snapshot = PaidRecommendationService.replay(request);
+        String snapshot = recommendations.replay(request);
         // 기존 JSON 계약을 바꾸지 않고 상세 화면에 필요한 시각만 헤더로 전달한다.
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .header("X-Recommendation-Type", request.kind())

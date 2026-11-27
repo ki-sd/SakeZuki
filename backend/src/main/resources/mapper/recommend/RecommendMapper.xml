@@ -151,7 +151,7 @@
             s.no,
             s.name_ko AS nameKo,
             s.name_ja AS nameJa,
-            s.image_url AS imageUrl,
+            <include refid="com.sakezuki.backend.image.CatalogImageMapper.catalogUrl"/> AS imageUrl,
             s.sake_type AS sakeType,
             b.prefecture,
             s.polishing_ratio AS polishingRatio,
