@@ -37,3 +37,12 @@ python3 scripts/test_auth_integration.py --e2e
 ```
 
 IMG-03B-3는 공통 변환·저장 API 위에 자산 메타데이터, 접속 권한과 활성 자산 게이트웨이를 구현한다. 운영 기능에는 기존 추천 SQL 수정, 구버전 Tools 쓰기 차단 및 V9 잠금 계약 준수가 여전히 필요하다. 운영 DB·R2, Gemini, 외부 사이트 크롤링, OCI 배포는 실행하지 않는다. ARM64/Windows는 이 변경에서 직접 실행하지 않았다.
+
+## 검증 기록
+
+검증 코드 `4126552dfbb9a7766c60dd307593ba06f487bb3c`. Codex Cloud Linux amd64, Temurin 21 및 격리 MySQL 8.4.13을 사용했다.
+
+- Tools Wrapper로 새 공통 모듈 6개와 Tools 기본 69개를 실행했다. Backend 기본 28개·MySQL 통합 28개 및 Tools MySQL 통합 17개도 통과했다. XML에서 실패·오류·스킵 0건을 확인했다. 카탈로그 3×15 최초 저장 45회 성공과 실제 1205 후 새 연결 재시도를 재검증했다.
+- Backend Wrapper는 공통 빌드 산출물을 지운 뒤 `bootJar`를 성공했다. 런타임 트리와 JAR에 `image-core`가 있고 Tools JAR·Jsoup·Tools의 OkHttp 5.3.2는 없었다. Backend 기존 Google GenAI의 OkHttp 4.12.0 경로는 유지된다. 공통 프로젝트 설정에는 Backend와 Tools로 향하는 역의존이 없다.
+- 옵트인 변수를 뺀 `r2DevSmoke`는 Gradle에서 차단됐다. 실제 R2에는 연결하지 않았다. V1–V9 마이그레이션은 기준 main과 같다.
+- 로컬 `python3 scripts/test_public_containers.py`는 새 Docker COPY 단계까지 도달했으나 컨테이너 빌드 내부에서 `services.gradle.org` DNS 해석이 실패했다. Linux Docker 기동·HTTP/HTTPS와 전체 GitHub Actions 결과는 PR의 새 HEAD 검증을 참조한다.
