@@ -33,3 +33,19 @@ MySQL UNIQUE는 NULL을 여럿 허용한다. 외부 키가 없을 때 생성 컬
 ## 후속 경계
 
 IMG-03B-2가 공유 이미지 처리 모듈, IMG-03B-3이 이미지 자산·Backend 제공 계약을 담당한다. UGC API와 Frontend, 운영 DB·R2 접근, 외부 사이트 크롤링 및 Gemini 호출은 범위 밖이다.
+
+## 격리 검증 기록
+
+검증 변경 기준 `e9164e7673abb34dd76f89995fe44584cf4524a3`. Codex Cloud Linux amd64, Temurin 21, MySQL 8.4.13의 격리 tmpfs 컨테이너를 사용했다.
+
+| 실행 명령 | 테스트 | 결과 |
+| --- | --- | --- |
+| `cd tools && bash ./gradlew --no-daemon cleanTest test` | Tools 기본 66개 | 통과 |
+| `python3 scripts/test_auth_integration.py` | Backend 기본 28개 | 통과 |
+| 같은 격리 실행기의 `authIntegrationTest` | Backend·MySQL 28개 | 통과. 초기 설치, V5 업그레이드, V7 충돌 복구와 NULL 외부 ID의 검색·목록·상세·추천 후보 확인 |
+| 같은 격리 실행기의 `catalogIntegrationTest` | Tools·MySQL 4개 | 통과. 출처별 고유성·FK·키 없는 제보 중복 방지, 재수집·트랜잭션, 동시 쓰기 가시성, 사용자 행의 이미지·번역·보완 격리 |
+| `git diff --check`, 기존 V1–V5 diff 및 문서 링크 확인 | 변경 범위 | 통과 |
+
+사케 10,337건, 양조장 905건, 브랜드 1,525건의 Guide 출처를 확인했다. V5 업그레이드 시 기존 카탈로그·프로필·추천 fixture 행을 비교했다. V7의 잘못된 소유자 충돌을 주입했을 때 검사가 실패하며 V7 DML이 롤백되고 V6 DDL이 남았다. 충돌 행만 격리에서 제거하고 `repair → migrate`로 V8까지 통과했다. 첫 실행에서 발견한 기존 테스트의 V5 고정 건수 단언은 V8에 맞게 갱신했고, 추천 조건을 생략할 때 발생하는 기존 SQL 문제는 후속 과제로 기록했다. 추천 후보 검증은 모든 검색 조건을 제공하되 상품 프로필에는 NULL 수치를 유지했다.
+
+독립 리뷰 및 원격 CI 결과는 PR에서 확인해야 한다. 이 로컬 실행에는 브라우저 E2E와 공개 Docker 검증을 포함하지 않았다.
