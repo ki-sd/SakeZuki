@@ -23,6 +23,16 @@ public class BrandRepository {
             BrandData brand,
             long breweryNo
     ) throws SQLException {
+        if (brand.getSourceId() == null || brand.getSourceId().isBlank()) {
+            throw new SQLException("SAKE_GUIDE source ID is required");
+        }
+        return GuideCatalogSource.BRAND.save(conn, () -> saveLegacy(brand, breweryNo));
+    }
+
+    private long saveLegacy(
+            BrandData brand,
+            long breweryNo
+    ) throws SQLException {
 
         String sql = """
                 INSERT INTO BRAND (

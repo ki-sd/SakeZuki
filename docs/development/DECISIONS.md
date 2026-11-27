@@ -14,3 +14,4 @@
 | DEC-008 | Accepted | 작업별 주 개발자, 별도 브랜치·작업 공간, 증거 SHA를 사용한다. 동시 push와 상시 문서 잠금 방식은 피하고 GitHub PR/Issue로 충돌을 조율한다. | [작업 범위](WORKSTREAMS.md) · [QA](../qa/README.md). 공유 자원 변경이 겹치면 작업 순서 재조정 |
 | DEC-009 | Proposed | 제보 리비전·승인 이력을 공개 카탈로그에서 분리하고, 내부 PK를 유지하면서 외부 ID를 출처별 연결로 옮긴다. 공개 전 승인 리비전과 상품 식별값의 중복을 검증한다. | [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) · 마이그레이션과 도구 호환 검증 후 확정 |
 | DEC-010 | Proposed | IMG-03C와 UGC가 이미지 자산·권리·검증된 객체 계약을 공유한다. 객체 저장과 DB 공개 전환은 개별 단계로 기록하고 활성 자산만 전달한다. | [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) · 공통 모듈, 권리 철회 및 캐시 정책 검토 |
+| DEC-011 | Proposed | 내부 PK를 유지하고 대상별 실제 FK 출처 테이블로 전환한다. 백필 검증 이후 레거시 ID에 NULL을 허용하며 신규 Guide 쓰기는 같은 트랜잭션에서 두 표현을 기록한다. | [IMG-03B-1 전환](IMG-03B-1_CATALOG_SOURCES.md) · 구버전 쓰기 작업을 중지한 뒤 전환 |

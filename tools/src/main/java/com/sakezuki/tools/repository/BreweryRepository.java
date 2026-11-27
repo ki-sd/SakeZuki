@@ -22,6 +22,15 @@ public class BreweryRepository {
     public long save(
             BreweryData brewery
     ) throws SQLException {
+        if (brewery.getSourceId() == null || brewery.getSourceId().isBlank()) {
+            throw new SQLException("SAKE_GUIDE source ID is required");
+        }
+        return GuideCatalogSource.BREWERY.save(conn, () -> saveLegacy(brewery));
+    }
+
+    private long saveLegacy(
+            BreweryData brewery
+    ) throws SQLException {
 
         String sql = """
                 INSERT INTO BREWERY (

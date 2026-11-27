@@ -37,6 +37,12 @@ def main():
     tsconfig_generated = None
     try:
         subprocess.run(compose + ["up", "-d", "--wait"], env=env, cwd=ROOT, check=True)
+        # Flyway upgrade/repair tests use a separate disposable schema in the same container.
+        subprocess.run(compose + ["exec", "-T", "mysql-auth-test", "sh", "-c",
+                                  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root'], env=env, cwd=ROOT,
+                       input="CREATE DATABASE IF NOT EXISTS sakezuki_catalog_it;\n"
+                             "GRANT ALL ON sakezuki_catalog_it.* TO 'auth_it'@'%';\n",
+                       text=True, check=True)
         # 저장소 wrapper의 실행 비트와 관계없이 Linux에서도 동일한 검증을 실행한다.
         wrapper = [str(ROOT / "backend" / "gradlew.bat")] if os.name == "nt" else ["bash", str(ROOT / "backend" / "gradlew")]
         gradle = wrapper + ["cleanTest", "cleanAuthIntegrationTest", "test", "authIntegrationTest", "--no-daemon"]
@@ -49,8 +55,14 @@ def main():
             print(f"{task}: {counts}", flush=True)
             if result.returncode == 0 and (not reports or counts["skipped"]):
                 raise RuntimeError("Required backend tests were missing or skipped")
-        if result.returncode or not args.e2e:
+        if result.returncode:
             return result.returncode
+        tools_dir = ROOT / "tools"
+        tools_wrapper = ([str(tools_dir / "gradlew.bat")] if os.name == "nt"
+                         else ["bash", str(tools_dir / "gradlew")])
+        subprocess.run(tools_wrapper + ["--no-daemon", "catalogIntegrationTest"], env=env, cwd=tools_dir, check=True)
+        if not args.e2e:
+            return 0
         subprocess.run(wrapper + ["authE2eClasspath", "--no-daemon"], env=env, cwd=ROOT / "backend", check=True)
         classpath = (ROOT / "backend/build/auth-e2e-classpath.txt").read_text().replace("\\", "/")
         java_args = ROOT / "backend/build/auth-e2e.args"

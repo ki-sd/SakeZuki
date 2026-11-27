@@ -25,10 +25,10 @@ public class TranslationRepository {
         String sql="""
             SELECT no,name_ja,name_kana
             FROM BRAND
-            WHERE name_ko IS NULL
+            WHERE %s AND name_ko IS NULL
             ORDER BY no
             LIMIT ?
-            """;
+            """.formatted(GuideCatalogSource.BRAND.predicate());
 
         List<BrandTranslationData> brands=new ArrayList<>();
 
@@ -53,8 +53,8 @@ public class TranslationRepository {
         String sql="""
             UPDATE BRAND
             SET name_ko=?
-            WHERE no=? AND name_ko IS NULL
-            """;
+            WHERE %s AND no=? AND name_ko IS NULL
+            """.formatted(GuideCatalogSource.BRAND.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql)){
             pstmt.setString(1,nameKo);
@@ -67,8 +67,8 @@ public class TranslationRepository {
         String sql="""
             SELECT COUNT(*)
             FROM BRAND
-            WHERE name_ko IS NULL
-            """;
+            WHERE %s AND name_ko IS NULL
+            """.formatted(GuideCatalogSource.BRAND.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql);
             ResultSet rs=pstmt.executeQuery()){
@@ -83,13 +83,13 @@ public class TranslationRepository {
         String sql="""
             SELECT MIN(no) AS no,name_ja,name_kana
             FROM SAKE
-            WHERE name_ko IS NULL
+            WHERE %s AND name_ko IS NULL
               AND name_ja IS NOT NULL
               AND TRIM(name_ja)<>''
             GROUP BY name_ja,name_kana
             ORDER BY MIN(no)
             LIMIT ?
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         List<SakeTranslationData> sakes=new ArrayList<>();
 
@@ -117,18 +117,18 @@ public class TranslationRepository {
             sql="""
                 UPDATE SAKE
                 SET name_ko=?
-                WHERE name_ja=?
+                WHERE %s AND name_ja=?
                   AND name_kana IS NULL
                   AND name_ko IS NULL
-                """;
+                """.formatted(GuideCatalogSource.SAKE.predicate());
         }else{
             sql="""
                 UPDATE SAKE
                 SET name_ko=?
-                WHERE name_ja=?
+                WHERE %s AND name_ja=?
                   AND name_kana=?
                   AND name_ko IS NULL
-                """;
+                """.formatted(GuideCatalogSource.SAKE.predicate());
         }
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql)){
@@ -149,12 +149,12 @@ public class TranslationRepository {
             FROM (
                 SELECT name_ja,name_kana
                 FROM SAKE
-                WHERE name_ko IS NULL
+                WHERE %s AND name_ko IS NULL
                   AND name_ja IS NOT NULL
                   AND TRIM(name_ja)<>''
                 GROUP BY name_ja,name_kana
             ) t
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql);
             ResultSet rs=pstmt.executeQuery()){
@@ -169,12 +169,12 @@ public class TranslationRepository {
         String sql="""
             SELECT DISTINCT rice
             FROM SAKE
-            WHERE rice IS NOT NULL
+            WHERE %s AND rice IS NOT NULL
               AND TRIM(rice)<>''
               AND rice_ko IS NULL
             ORDER BY rice
             LIMIT ?
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         List<String> values=new ArrayList<>();
 
@@ -195,9 +195,9 @@ public class TranslationRepository {
         String sql="""
             UPDATE SAKE
             SET rice_ko=?
-            WHERE rice=?
+            WHERE %s AND rice=?
               AND rice_ko IS NULL
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql)){
             pstmt.setString(1,riceKo);
@@ -210,10 +210,10 @@ public class TranslationRepository {
         String sql="""
             SELECT COUNT(DISTINCT rice)
             FROM SAKE
-            WHERE rice IS NOT NULL
+            WHERE %s AND rice IS NOT NULL
               AND TRIM(rice)<>''
               AND rice_ko IS NULL
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql);
             ResultSet rs=pstmt.executeQuery()){
@@ -228,12 +228,12 @@ public class TranslationRepository {
         String sql="""
             SELECT DISTINCT yeast
             FROM SAKE
-            WHERE yeast IS NOT NULL
+            WHERE %s AND yeast IS NOT NULL
               AND TRIM(yeast)<>''
               AND yeast_ko IS NULL
             ORDER BY yeast
             LIMIT ?
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         List<String> values=new ArrayList<>();
 
@@ -254,9 +254,9 @@ public class TranslationRepository {
         String sql="""
             UPDATE SAKE
             SET yeast_ko=?
-            WHERE yeast=?
+            WHERE %s AND yeast=?
               AND yeast_ko IS NULL
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql)){
             pstmt.setString(1,yeastKo);
@@ -269,10 +269,10 @@ public class TranslationRepository {
         String sql="""
             SELECT COUNT(DISTINCT yeast)
             FROM SAKE
-            WHERE yeast IS NOT NULL
+            WHERE %s AND yeast IS NOT NULL
               AND TRIM(yeast)<>''
               AND yeast_ko IS NULL
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql);
             ResultSet rs=pstmt.executeQuery()){
@@ -287,9 +287,9 @@ public class TranslationRepository {
         String sql="""
             SELECT DISTINCT rice
             FROM SAKE
-            WHERE rice IS NOT NULL
+            WHERE %s AND rice IS NOT NULL
               AND TRIM(rice)<>''
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         return findDistinctValues(sql,"rice");
     }
@@ -298,9 +298,9 @@ public class TranslationRepository {
         String sql="""
             SELECT DISTINCT yeast
             FROM SAKE
-            WHERE yeast IS NOT NULL
+            WHERE %s AND yeast IS NOT NULL
               AND TRIM(yeast)<>''
-            """;
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         return findDistinctValues(sql,"yeast");
     }
@@ -323,8 +323,8 @@ public class TranslationRepository {
         String sql="""
             UPDATE SAKE
             SET rice=?
-            WHERE rice=?
-            """;
+            WHERE %s AND rice=?
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql)){
             pstmt.setString(1,cleaned);
@@ -337,8 +337,8 @@ public class TranslationRepository {
         String sql="""
             UPDATE SAKE
             SET yeast=?
-            WHERE yeast=?
-            """;
+            WHERE %s AND yeast=?
+            """.formatted(GuideCatalogSource.SAKE.predicate());
 
         try(PreparedStatement pstmt=conn.prepareStatement(sql)){
             pstmt.setString(1,cleaned);

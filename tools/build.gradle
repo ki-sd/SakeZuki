@@ -26,7 +26,7 @@ dependencies {
 }
 
 test {
-    useJUnitPlatform()
+    useJUnitPlatform { excludeTags 'mysql-integration' }
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -53,6 +53,21 @@ tasks.register('r2DevSmoke', JavaExec) {
         if (System.getenv('R2_SMOKE_CONFIRM') != 'sakezuki-images-dev' ||
                 System.getenv('R2_BUCKET') != 'sakezuki-images-dev') {
             throw new GradleException('R2 smoke requires explicit confirmation for sakezuki-images-dev.')
+        }
+    }
+}
+
+tasks.register('catalogIntegrationTest', Test) {
+    group = 'verification'
+    description = 'Tests catalog repositories on the isolated migrated MySQL database.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'mysql-integration' }
+    outputs.upToDateWhen { false }
+    doFirst {
+        if (!(System.getenv('AUTH_TEST_JDBC_URL') ==~ /jdbc:mysql:\/\/(localhost|127\.0\.0\.1):3308\/sakezuki_auth_it(\?.*)?/) ||
+                !System.getenv('AUTH_TEST_DB_PASSWORD')) {
+            throw new GradleException('Use scripts/test_auth_integration.py with its isolated MySQL database.')
         }
     }
 }
