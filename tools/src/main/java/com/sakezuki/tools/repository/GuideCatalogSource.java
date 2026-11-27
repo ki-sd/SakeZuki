@@ -2,17 +2,22 @@ package com.sakezuki.tools.repository;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.regex.Pattern;
 
 enum GuideCatalogSource {
-    SAKE("SAKE", "sake_no"),
-    BREWERY("BREWERY", "brewery_no"),
-    BRAND("BRAND", "brand_no");
+    SAKE("SAKE", "sake_no", "sake", false),
+    BREWERY("BREWERY", "brewery_no", "brewery", true),
+    BRAND("BRAND", "brand_no", "brand", true);
+
+    private static final Pattern FORBIDDEN_KEY_TEXT = Pattern.compile(
+            "^\\p{IsWhite_Space}|\\p{IsWhite_Space}$|[\\p{Cc}\\p{Cs}]");
 
     private final String ownerPredicate;
+    private final String lockRequestedOwners;
     private final String register;
     private final String verifyOwner;
 
-    GuideCatalogSource(String table, String foreignKey) {
+    GuideCatalogSource(String table, String foreignKey, String indexSuffix, boolean legacyTextId) {
         // Match the ID actually stored by the legacy upsert, preserving its collation and spelling.
         String sameIdentity = """
                 src.%2$s = %1$s.no AND src.source_system = 'SAKE_GUIDE'
@@ -23,6 +28,16 @@ enum GuideCatalogSource {
         // A current read avoids using an older REPEATABLE READ snapshot after an upsert.
         verifyOwner = "SELECT 1 FROM " + table + " JOIN " + table + "_SOURCE src ON " + sameIdentity
                 + " WHERE " + table + ".no = ? FOR SHARE";
+        String keyColumn = legacyTextId ? "legacy_key" : "external_key";
+        String index = legacyTextId ? "ix_" + indexSuffix + "_source_legacy_key"
+                : "uq_" + indexSuffix + "_source_external";
+        String collation = legacyTextId ? "utf8mb4_0900_ai_ci" : "utf8mb4_0900_bin";
+        lockRequestedOwners = """
+                SELECT %s FROM %s_SOURCE FORCE INDEX (%s)
+                WHERE source_system = 'SAKE_GUIDE'
+                  AND %s = CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE %s
+                FOR UPDATE
+                """.formatted(foreignKey, table, index, keyColumn, collation);
         register = """
                 INSERT INTO %1$s_SOURCE (%2$s, source_system, external_key)
                 SELECT no, 'SAKE_GUIDE', CAST(source_id AS CHAR CHARACTER SET utf8mb4)
@@ -40,7 +55,16 @@ enum GuideCatalogSource {
         long save() throws SQLException;
     }
 
-    long save(Connection connection, CatalogWrite write) throws SQLException {
+    long save(Connection connection, String requestedKey, CatalogWrite write) throws SQLException {
+        if (requestedKey == null || requestedKey.isEmpty()
+                || requestedKey.codePointCount(0, requestedKey.length()) > 255
+                || FORBIDDEN_KEY_TEXT.matcher(requestedKey).find()) {
+            throw new SQLException("Invalid SAKE_GUIDE external key");
+        }
+        int isolation = connection.getTransactionIsolation();
+        if (isolation != Connection.TRANSACTION_REPEATABLE_READ && isolation != Connection.TRANSACTION_SERIALIZABLE) {
+            throw new SQLException("SAKE_GUIDE writes require REPEATABLE READ or SERIALIZABLE");
+        }
         boolean ownsTransaction = connection.getAutoCommit();
         if (ownsTransaction) {
             connection.setAutoCommit(false);
@@ -48,7 +72,19 @@ enum GuideCatalogSource {
         var checkpoint = ownsTransaction ? null : connection.setSavepoint();
         long no;
         try {
+            // Lock the legacy row first, then the requested index range with a current read.
+            // InnoDB protects missing keys in this range at the required isolation levels.
             no = write.save();
+            try (var statement = connection.prepareStatement(lockRequestedOwners)) {
+                statement.setString(1, requestedKey);
+                try (var owners = statement.executeQuery()) {
+                    while (owners.next()) {
+                        if (owners.getLong(1) != no) {
+                            throw new SQLException("Requested SAKE_GUIDE key conflicts with another catalog owner");
+                        }
+                    }
+                }
+            }
             try (var statement = connection.prepareStatement(register)) {
                 statement.setLong(1, no);
                 statement.executeUpdate();
@@ -66,7 +102,7 @@ enum GuideCatalogSource {
             } else {
                 connection.releaseSavepoint(checkpoint);
             }
-        } catch (SQLException | RuntimeException failure) {
+        } catch (SQLException | RuntimeException | Error failure) {
             try {
                 if (ownsTransaction) {
                     connection.rollback();
@@ -75,15 +111,33 @@ enum GuideCatalogSource {
                     connection.rollback(checkpoint);
                     connection.releaseSavepoint(checkpoint);
                 }
-            } catch (SQLException rollbackFailure) {
-                failure.addSuppressed(rollbackFailure);
-                // Do not restore auto-commit after an unsuccessful rollback.
+            } catch (SQLException | RuntimeException | Error cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+                discard(connection, failure);
             }
             throw failure;
         }
         if (ownsTransaction) {
-            connection.setAutoCommit(true);
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException | RuntimeException | Error failure) {
+                discard(connection, failure);
+                throw failure;
+            }
         }
         return no;
+    }
+
+    private static void discard(Connection connection, Throwable failure) {
+        try {
+            connection.abort(Runnable::run);
+        } catch (SQLException | RuntimeException | Error abortFailure) {
+            failure.addSuppressed(abortFailure);
+            try {
+                connection.close();
+            } catch (SQLException | RuntimeException | Error closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+        }
     }
 }

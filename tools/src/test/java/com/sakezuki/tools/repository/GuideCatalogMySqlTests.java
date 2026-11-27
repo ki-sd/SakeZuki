@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -148,6 +151,261 @@ class GuideCatalogMySqlTests {
                     execute(writer, "DELETE FROM BREWERY_SOURCE WHERE brewery_no=" + breweryNo);
                     execute(writer, "DELETE FROM BREWERY WHERE no=" + breweryNo);
                 }
+            }
+        }
+    }
+
+    @Test
+    void detachedGuideOwnerBlocksCaseVariantAndExactRecrawl() throws Exception {
+        try (var connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                execute(connection, "INSERT INTO BREWERY(name_ja) VALUES('DetachedFixture')");
+                execute(connection, "INSERT INTO BREWERY_SOURCE(brewery_no,source_system,external_key) "
+                        + "SELECT no,'SAKE_GUIDE','ReservedCaseFixture' FROM BREWERY WHERE name_ja='DetachedFixture'");
+                var repository = new BreweryRepository(connection);
+                assertThrows(SQLException.class, () -> repository.save(
+                        BreweryData.builder().sourceId("reservedcasefixture").nameJa("UnexpectedOverwrite").build()));
+                assertThrows(SQLException.class, () -> repository.save(
+                        BreweryData.builder().sourceId("ReservedCaseFixture").nameJa("UnexpectedOverwrite").build()));
+                assertEquals(0, scalar(connection, "SELECT COUNT(*) FROM BREWERY WHERE source_id='ReservedCaseFixture'"));
+            } finally {
+                connection.rollback();
+            }
+        }
+    }
+
+    @Test
+    void requestedKeyWithDifferentOwnerCannotUpdateLegacyMatch() throws Exception {
+        try (var connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                var repository = new BreweryRepository(connection);
+                repository.save(BreweryData.builder().sourceId("AlphaFixture").nameJa("OriginalFixture").build());
+                execute(connection, "INSERT INTO BREWERY(name_ja) VALUES('OtherFixture')");
+                execute(connection, "INSERT INTO BREWERY_SOURCE(brewery_no,source_system,external_key) "
+                        + "SELECT no,'SAKE_GUIDE','alphafixture' FROM BREWERY WHERE name_ja='OtherFixture'");
+                assertThrows(SQLException.class, () -> repository.save(
+                        BreweryData.builder().sourceId("alphafixture").nameJa("UnexpectedOverwrite").build()));
+                assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM BREWERY WHERE name_ja='OriginalFixture'"));
+            } finally {
+                connection.rollback();
+            }
+        }
+    }
+
+    @Test
+    void accentAndKanaVariantsWithDistinctOwnersAreRejectedForBrand() throws Exception {
+        try (var connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                long brewery = scalar(connection, "SELECT MIN(no) FROM BREWERY");
+                var repository = new BrandRepository(connection);
+                for (String[] keys : new String[][]{{"CaféFixture", "CafeFixture"}, {"がFixture", "かFixture"},
+                        {"ガUnicodeFixture", "カ\u3099UnicodeFixture"}}) {
+                    long owner = repository.save(BrandData.builder().sourceId(keys[0]).nameJa("OriginalBrand").build(), brewery);
+                    execute(connection, "INSERT INTO BRAND(brewery_no,name_ja) VALUES(" + brewery + ",'DetachedBrand')");
+                    long detached = scalar(connection, "SELECT MAX(no) FROM BRAND");
+                    try (var insert = connection.prepareStatement(
+                            "INSERT INTO BRAND_SOURCE(brand_no,source_system,external_key) VALUES(?,'SAKE_GUIDE',?)")) {
+                        insert.setLong(1, detached);
+                        insert.setString(2, keys[1]);
+                        assertEquals(1, insert.executeUpdate());
+                    }
+                    assertThrows(SQLException.class, () -> repository.save(
+                            BrandData.builder().sourceId(keys[1]).nameJa("OverwriteBrand").build(), brewery));
+                    assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM BRAND WHERE no=" + owner + " AND name_ja='OriginalBrand'"));
+                }
+            } finally {
+                connection.rollback();
+            }
+        }
+    }
+
+    @Test
+    void numericOwnerConflictRollsBackAutocommitAndRestoresConnection() throws Exception {
+        try (var writer = connect(); var observer = connect()) {
+            long brewery = scalar(writer, "SELECT MIN(no) FROM BREWERY");
+            long brand = scalar(writer, "SELECT MIN(no) FROM BRAND WHERE brewery_no=" + brewery);
+            execute(writer, "INSERT INTO SAKE(brewery_no,name_ja) VALUES(" + brewery + ",'DetachedSakeFixture')");
+            long detached = scalar(writer, "SELECT no FROM SAKE WHERE name_ja='DetachedSakeFixture'");
+            try {
+                execute(writer, "INSERT INTO SAKE_SOURCE(sake_no,source_system,external_key) VALUES("
+                        + detached + ",'SAKE_GUIDE','7000000002')");
+                assertThrows(SQLException.class, () -> new SakeRepository(writer)
+                        .save(SakeData.builder().sourceId(7_000_000_002L).nameJa("OverwriteSake").build(), brewery, brand));
+                assertTrue(writer.getAutoCommit());
+                assertEquals(0, scalar(observer, "SELECT COUNT(*) FROM SAKE WHERE source_id=7000000002"));
+                assertEquals(detached, scalar(observer, "SELECT sake_no FROM SAKE_SOURCE WHERE external_key='7000000002'"));
+            } finally {
+                execute(writer, "DELETE FROM SAKE_SOURCE WHERE sake_no=" + detached);
+                execute(writer, "DELETE FROM SAKE WHERE no=" + detached);
+            }
+        }
+    }
+
+    @Test
+    void invalidKeysAreRejectedByRepositoriesAndDatabaseWithoutChangingSpelling() throws Exception {
+        try (var connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                long brewery = scalar(connection, "SELECT MIN(no) FROM BREWERY");
+                long brand = scalar(connection, "SELECT MIN(no) FROM BRAND");
+                long sake = scalar(connection, "SELECT MIN(no) FROM SAKE");
+                for (String key : new String[]{"", "\t", "　", "\u00a0", " PaddedKey ", "　前", "後\u00a0", "内\t部", "内\u0085部"}) {
+                    assertThrows(SQLException.class, () -> new BreweryRepository(connection)
+                            .save(BreweryData.builder().sourceId(key).nameJa("Invalid").build()));
+                    assertThrows(SQLException.class, () -> new BrandRepository(connection)
+                            .save(BrandData.builder().sourceId(key).nameJa("Invalid").build(), brewery));
+                    for (Object[] fixture : new Object[][]{{"BREWERY", "brewery_no", brewery}, {"BRAND", "brand_no", brand},
+                            {"SAKE", "sake_no", sake}}) {
+                        try (var insert = connection.prepareStatement("INSERT INTO " + fixture[0] + "_SOURCE("
+                                + fixture[1] + ",source_system,external_key) VALUES(?,'ADMIN',?)")) {
+                            insert.setLong(1, (Long) fixture[2]);
+                            insert.setString(2, key);
+                            assertThrows(SQLException.class, insert::executeUpdate);
+                        }
+                    }
+                }
+                for (Long invalidId : new Long[]{null, 0L, -1L}) {
+                    assertThrows(SQLException.class, () -> new SakeRepository(connection)
+                            .save(SakeData.builder().sourceId(invalidId).nameJa("Invalid").build(), brewery, brand));
+                }
+                new BrandRepository(connection).save(BrandData.builder().sourceId("酒蔵 Café").nameJa("Valid").build(), brewery);
+                assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM BRAND_SOURCE WHERE external_key='酒蔵 Café'"));
+            } finally {
+                connection.rollback();
+            }
+        }
+    }
+
+    @Test
+    void pendingOwnerClaimSerializesContendingGuideWriteAndKeepsCallerWorkUncommitted() throws Exception {
+        try (var owner = connect(); var contender = connect(); var observer = connect();
+             var workers = Executors.newSingleThreadExecutor()) {
+            execute(owner, "INSERT INTO BREWERY(name_ja) VALUES('QaRaceFixture')");
+            long no = scalar(owner, "SELECT no FROM BREWERY WHERE name_ja='QaRaceFixture'");
+            try {
+                owner.setAutoCommit(false);
+                execute(owner, "INSERT INTO BREWERY_SOURCE(brewery_no,source_system,external_key) VALUES("
+                        + no + ",'SAKE_GUIDE','QaClaimFixture')");
+                contender.setAutoCommit(false);
+                execute(contender, "INSERT INTO BREWERY(name_ja) VALUES('QaCallerWork')");
+                var starting = new CountDownLatch(1);
+                var result = workers.submit(() -> {
+                    starting.countDown();
+                    return assertThrows(SQLException.class, () -> new BreweryRepository(contender).save(
+                            BreweryData.builder().sourceId("qaclaimfixture").nameJa("OverwriteRace").build()));
+                });
+                assertTrue(starting.await(5, TimeUnit.SECONDS));
+                owner.commit();
+                assertTrue(result.get(10, TimeUnit.SECONDS).getMessage().contains("conflicts"));
+                assertEquals(1, scalar(contender, "SELECT COUNT(*) FROM BREWERY WHERE name_ja='QaCallerWork'"));
+                assertEquals(0, scalar(observer, "SELECT COUNT(*) FROM BREWERY WHERE name_ja IN ('QaCallerWork','OverwriteRace')"));
+                assertFalse(contender.getAutoCommit());
+            } finally {
+                owner.rollback();
+                contender.rollback();
+                owner.setAutoCommit(true);
+                execute(owner, "DELETE FROM BREWERY_SOURCE WHERE brewery_no=" + no);
+                execute(owner, "DELETE FROM BREWERY WHERE no=" + no);
+            }
+        }
+    }
+
+    @Test
+    void previouslyAbsentExactKeyCannotBeClaimedConcurrentlyByAnotherOwner() throws Exception {
+        try (var writer = connect(); var contender = connect(); var observer = connect();
+             var workers = Executors.newSingleThreadExecutor()) {
+            execute(contender, "INSERT INTO BREWERY(name_ja) VALUES('QaOtherOwner')");
+            long other = scalar(contender, "SELECT no FROM BREWERY WHERE name_ja='QaOtherOwner'");
+            long owner = 0;
+            try {
+                writer.setAutoCommit(false);
+                owner = new BreweryRepository(writer).save(
+                        BreweryData.builder().sourceId("QaFreshKey").nameJa("QaFirstOwner").build());
+                assertEquals(0, scalar(observer, "SELECT COUNT(*) FROM BREWERY_SOURCE WHERE external_key='QaFreshKey'"));
+                var started = new CountDownLatch(1);
+                var claim = workers.submit(() -> {
+                    started.countDown();
+                    return assertThrows(SQLException.class, () -> execute(contender,
+                            "INSERT INTO BREWERY_SOURCE(brewery_no,source_system,external_key) VALUES("
+                                    + other + ",'SAKE_GUIDE','QaFreshKey')"));
+                });
+                assertTrue(started.await(5, TimeUnit.SECONDS));
+                assertThrows(java.util.concurrent.TimeoutException.class, () -> claim.get(150, TimeUnit.MILLISECONDS));
+                writer.commit();
+                assertEquals(1062, claim.get(10, TimeUnit.SECONDS).getErrorCode());
+                assertEquals(owner, scalar(observer, "SELECT brewery_no FROM BREWERY_SOURCE WHERE external_key='QaFreshKey'"));
+            } finally {
+                writer.rollback();
+                writer.setAutoCommit(true);
+                execute(writer, "DELETE FROM BREWERY_SOURCE WHERE brewery_no IN (" + owner + "," + other + ")");
+                execute(writer, "DELETE FROM BREWERY WHERE no IN (" + owner + "," + other + ")");
+            }
+        }
+    }
+
+    @Test
+    void errorInOwnedWriteRollsBackWithoutReplacingOriginalError() throws Exception {
+        try (var connection = connect(); var observer = connect()) {
+            var failure = new AssertionError("fixture error");
+            assertSame(failure, assertThrows(AssertionError.class, () ->
+                    GuideCatalogSource.BREWERY.save(connection, "QaErrorFixture", () -> {
+                        execute(connection, "INSERT INTO BREWERY(name_ja) VALUES('QaErrorFixture')");
+                        throw failure;
+                    })));
+            assertTrue(connection.getAutoCommit());
+            assertEquals(0, scalar(observer, "SELECT COUNT(*) FROM BREWERY WHERE name_ja='QaErrorFixture'"));
+        }
+    }
+
+    @Test
+    void translationCountsAndNonNullKanaUpdateIgnoreSourceLessRows() throws Exception {
+        try (var connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                var translations = new TranslationRepository(connection);
+                int brandCount = translations.countUntranslatedBrands();
+                int sakeCount = translations.countUntranslatedSakeNames();
+                int riceCount = translations.countUntranslatedRice();
+                int yeastCount = translations.countUntranslatedYeast();
+                execute(connection, "INSERT INTO BREWERY(name_ja) VALUES('QaNoSourceBrewery')");
+                long userBrewery = scalar(connection, "SELECT no FROM BREWERY WHERE name_ja='QaNoSourceBrewery'");
+                execute(connection, "INSERT INTO BRAND(brewery_no,name_ja) VALUES(" + userBrewery + ",'QaNoSourceBrand')");
+                execute(connection, """
+                        INSERT INTO SAKE(brewery_no,name_ja,name_kana,rice,yeast)
+                        VALUES(%d,'QaKanaSake','かな','QaUserRice','QaUserYeast')
+                        """.formatted(userBrewery));
+                assertEquals(brandCount, translations.countUntranslatedBrands());
+                assertEquals(sakeCount, translations.countUntranslatedSakeNames());
+                assertEquals(riceCount, translations.countUntranslatedRice());
+                assertEquals(yeastCount, translations.countUntranslatedYeast());
+                assertFalse(translations.findUntranslatedRice(Integer.MAX_VALUE).contains("QaUserRice"));
+                assertFalse(translations.findUntranslatedYeast(Integer.MAX_VALUE).contains("QaUserYeast"));
+                assertFalse(translations.findRiceValues().contains("QaUserRice"));
+                assertFalse(translations.findYeastValues().contains("QaUserYeast"));
+
+                long guideBrewery = new BreweryRepository(connection).save(
+                        BreweryData.builder().sourceId("QaGuideBrewery").nameJa("QaGuideBrewery").build());
+                long guideBrand = new BrandRepository(connection).save(
+                        BrandData.builder().sourceId("QaGuideBrand").nameJa("QaGuideBrand").build(), guideBrewery);
+                new SakeRepository(connection).save(SakeData.builder().sourceId(GUIDE_ID).nameJa("QaKanaSake")
+                        .nameKana("かな").rice("QaGuideRice").yeast("QaGuideYeast").build(), guideBrewery, guideBrand);
+                assertEquals(brandCount + 1, translations.countUntranslatedBrands());
+                assertEquals(sakeCount + 1, translations.countUntranslatedSakeNames());
+                assertEquals(riceCount + 1, translations.countUntranslatedRice());
+                assertEquals(yeastCount + 1, translations.countUntranslatedYeast());
+                assertTrue(translations.findUntranslatedRice(Integer.MAX_VALUE).contains("QaGuideRice"));
+                assertTrue(translations.findUntranslatedYeast(Integer.MAX_VALUE).contains("QaGuideYeast"));
+                assertTrue(translations.findRiceValues().contains("QaGuideRice"));
+                assertTrue(translations.findYeastValues().contains("QaGuideYeast"));
+                translations.updateSakeNameKo("QaKanaSake", "かな", "합성");
+                assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM SAKE WHERE source_id IS NULL "
+                        + "AND name_ja='QaKanaSake' AND name_ko IS NULL"));
+                assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM SAKE WHERE source_id=" + GUIDE_ID + " AND name_ko='합성'"));
+            } finally {
+                connection.rollback();
             }
         }
     }

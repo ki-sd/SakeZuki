@@ -18,6 +18,7 @@ FROM BRAND
 WHERE source_id IS NOT NULL
 ON DUPLICATE KEY UPDATE brand_no = BRAND_SOURCE.brand_no;
 
+DROP TEMPORARY TABLE IF EXISTS catalog_source_backfill_check;
 CREATE TEMPORARY TABLE catalog_source_backfill_check (
     entity VARCHAR(10) NOT NULL PRIMARY KEY,
     legacy_count BIGINT NOT NULL,

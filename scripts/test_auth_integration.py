@@ -15,6 +15,16 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def verify_test_reports(module, task, exit_code):
+    reports = list((ROOT / module / "build/test-results" / task).glob("TEST-*.xml"))
+    suites = [ET.parse(report).getroot() for report in reports]
+    counts = {key: sum(int(suite.attrib[key]) for suite in suites)
+              for key in ("tests", "failures", "errors", "skipped")}
+    print(f"{module}/{task}: {counts}", flush=True)
+    if exit_code == 0 and (not counts["tests"] or any(counts[k] for k in ("failures", "errors", "skipped"))):
+        raise RuntimeError(f"Required tests missing or unsuccessful: {module}/{task}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--keep-database", action="store_true", help="Keep only the isolated test container for further testing")
@@ -47,20 +57,18 @@ def main():
         wrapper = [str(ROOT / "backend" / "gradlew.bat")] if os.name == "nt" else ["bash", str(ROOT / "backend" / "gradlew")]
         gradle = wrapper + ["cleanTest", "cleanAuthIntegrationTest", "test", "authIntegrationTest", "--no-daemon"]
         result = subprocess.run(gradle, env=env, cwd=ROOT / "backend")
-        # 실행된 XML 결과를 집계한다. 과거 보고서의 통과 수를 이번 검증으로 재사용하지 않는다.
-        for task in ["test", "authIntegrationTest"]:
-            reports = list((ROOT / "backend/build/test-results" / task).glob("TEST-*.xml"))
-            suites = [ET.parse(report).getroot() for report in reports]
-            counts = {key: sum(int(suite.get(key, "0")) for suite in suites) for key in ["tests", "failures", "errors", "skipped"]}
-            print(f"{task}: {counts}", flush=True)
-            if result.returncode == 0 and (not reports or counts["skipped"]):
-                raise RuntimeError("Required backend tests were missing or skipped")
+        for task in ("test", "authIntegrationTest"):
+            verify_test_reports("backend", task, result.returncode)
         if result.returncode:
             return result.returncode
         tools_dir = ROOT / "tools"
         tools_wrapper = ([str(tools_dir / "gradlew.bat")] if os.name == "nt"
                          else ["bash", str(tools_dir / "gradlew")])
-        subprocess.run(tools_wrapper + ["--no-daemon", "catalogIntegrationTest"], env=env, cwd=tools_dir, check=True)
+        tools_result = subprocess.run(tools_wrapper + ["--no-daemon", "cleanCatalogIntegrationTest",
+                                                      "catalogIntegrationTest"], env=env, cwd=tools_dir)
+        verify_test_reports("tools", "catalogIntegrationTest", tools_result.returncode)
+        if tools_result.returncode:
+            return tools_result.returncode
         if not args.e2e:
             return 0
         subprocess.run(wrapper + ["authE2eClasspath", "--no-daemon"], env=env, cwd=ROOT / "backend", check=True)

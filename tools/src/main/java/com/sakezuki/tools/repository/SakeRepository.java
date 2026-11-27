@@ -29,7 +29,7 @@ public class SakeRepository {
         if (sake.getSourceId() == null || sake.getSourceId() <= 0) {
             throw new SQLException("SAKE_GUIDE source ID is required");
         }
-        return GuideCatalogSource.SAKE.save(conn, () -> saveLegacy(sake, breweryNo, brandNo));
+        return GuideCatalogSource.SAKE.save(conn, sake.getSourceId().toString(), () -> saveLegacy(sake, breweryNo, brandNo));
     }
 
     private long saveLegacy(

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
 import java.util.List;
 import java.util.Map;
@@ -52,27 +53,35 @@ class CatalogMigrationTests {
     }
 
     @Test
-    void conflictingBackfillStopsBeforeNullableTransitionAndCanBeRepaired() {
+    void conflictingBackfillStopsBeforeNullableTransitionAndCanBeRepaired() throws Exception {
         flyway("6").migrate();
-        db.update("""
-                INSERT INTO SAKE_SOURCE (sake_no, source_system, external_key)
-                SELECT (SELECT MAX(no) FROM SAKE), 'SAKE_GUIDE', CAST(source_id AS CHAR)
-                FROM SAKE ORDER BY no LIMIT 1
-                """);
-        assertThrows(FlywayException.class, () -> flyway("8").migrate());
-        assertEquals("NO", db.queryForObject("""
-                SELECT IS_NULLABLE FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='SAKE' AND COLUMN_NAME='source_id'
-                """, String.class));
-        assertEquals(1L, db.queryForObject("SELECT COUNT(*) FROM `flyway_schema_history` WHERE version='7' AND success=0", Long.class));
-        assertEquals(1, count("SAKE_SOURCE")); // V7 DML rolled back; V6 DDL survived.
-        db.update("""
-                DELETE s FROM SAKE_SOURCE s JOIN SAKE c ON c.no=s.sake_no
-                WHERE s.source_system='SAKE_GUIDE' AND s.external_key <> CAST(c.source_id AS CHAR)
-                """);
-        flyway("8").repair();
-        assertEquals(2, flyway("8").migrate().migrationsExecuted);
-        assertCompleteBackfill();
+        try (var physical = ds.getConnection()) {
+            var reused = new SingleConnectionDataSource(physical, true);
+            db = new JdbcTemplate(reused);
+            var retry = Flyway.configure().dataSource(reused).target("8").load();
+            Long session = db.queryForObject("SELECT CONNECTION_ID()", Long.class);
+            db.update("""
+                    INSERT INTO SAKE_SOURCE (sake_no, source_system, external_key)
+                    SELECT (SELECT MAX(no) FROM SAKE), 'SAKE_GUIDE', CAST(source_id AS CHAR)
+                    FROM SAKE ORDER BY no LIMIT 1
+                    """);
+            assertThrows(FlywayException.class, () -> retry.migrate());
+            assertEquals("NO", db.queryForObject("""
+                    SELECT IS_NULLABLE FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='SAKE' AND COLUMN_NAME='source_id'
+                    """, String.class));
+            assertEquals(1L, db.queryForObject("SELECT COUNT(*) FROM `flyway_schema_history` WHERE version='7' AND success=0", Long.class));
+            assertEquals(1, count("SAKE_SOURCE")); // V7 DML rolled back; V6 DDL survived.
+            db.update("""
+                    DELETE s FROM SAKE_SOURCE s JOIN SAKE c ON c.no=s.sake_no
+                    WHERE s.source_system='SAKE_GUIDE' AND s.external_key <> CAST(c.source_id AS CHAR)
+                    """);
+            assertEquals(session, db.queryForObject("SELECT CONNECTION_ID()", Long.class));
+            retry.repair();
+            assertEquals(2, retry.migrate().migrationsExecuted);
+            assertEquals(session, db.queryForObject("SELECT CONNECTION_ID()", Long.class));
+            assertCompleteBackfill();
+        }
     }
 
     private void assertCompleteBackfill() {
