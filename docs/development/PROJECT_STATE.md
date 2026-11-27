@@ -1,6 +1,6 @@
 # 현재 프로젝트 상태
 
-2026-11-27 KST 기록. 저장소 기준 `main@6134148bdb4b7b9d85a012313c63da01d50a64ac`. 세션 시작 시 다시 확인한다.
+2026-11-27 KST 기록. 저장소 기준 `main@35029601ec34dc1f89768764bf5ec7fe14def01d`. 세션 시작 시 다시 확인한다.
 
 | 영역 | main 구현 및 상태 |
 | --- | --- |
@@ -13,6 +13,8 @@
 | 이미지 및 수집 | 이미지 URL과 실패 시 대체 UI 사용. tools의 수집·파싱·번역은 별도 Gradle 모듈. 기존 외부 URL 로딩 장애 보고. R2 저장 파이프라인은 계획 단계 |
 
 PR #2 인증·크레딧은 main에 병합됐다. PR #3은 선행 브랜치에 병합됐고, PR #4가 그 결과를 main에 반영했다. 아래 CI는 PR #4 head `70710bb5964f4e42ae56be02f22ff82a1377907b` 대상이다. main 병합 커밋과 SHA는 다르며 Git tree는 동일하다. backend 28 + MySQL 24, frontend 16, Chromium 9 및 Linux Docker HTTP/HTTPS 통과가 기록돼 있다. [PR #2](https://github.com/ki-sd/SakeZuki/pull/2) · [PR #3](https://github.com/ki-sd/SakeZuki/pull/3) · [PR #4](https://github.com/ki-sd/SakeZuki/pull/4) · [CI](https://github.com/ki-sd/SakeZuki/actions/runs/44987630641)
+
+DEV-01에서 게시된 Cloud 환경 복원과 개발 기준선을 확인했다. Cloud의 공개 컨테이너 빌드 제약과 동일 Git tree에 대한 CI 결과는 [DEV-01 검증 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
 
 ## 사용자 제공 운영 기록
 
