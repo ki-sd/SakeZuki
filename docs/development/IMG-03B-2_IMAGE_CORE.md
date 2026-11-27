@@ -46,3 +46,9 @@ IMG-03B-3는 공통 변환·저장 API 위에 자산 메타데이터, 접속 권
 - Backend Wrapper는 공통 빌드 산출물을 지운 뒤 `bootJar`를 성공했다. 런타임 트리와 JAR에 `image-core`가 있고 Tools JAR·Jsoup·Tools의 OkHttp 5.3.2는 없었다. Backend 기존 Google GenAI의 OkHttp 4.12.0 경로는 유지된다. 공통 프로젝트 설정에는 Backend와 Tools로 향하는 역의존이 없다.
 - 옵트인 변수를 뺀 `r2DevSmoke`는 Gradle에서 차단됐다. 실제 R2에는 연결하지 않았다. V1–V9 마이그레이션은 기준 main과 같다.
 - 로컬 `python3 scripts/test_public_containers.py`는 새 Docker COPY 단계까지 도달했으나 컨테이너 빌드 내부에서 `services.gradle.org` DNS 해석이 실패했다. Linux Docker 기동·HTTP/HTTPS와 전체 GitHub Actions 결과는 PR의 새 HEAD 검증을 참조한다.
+
+## 최종 독립 QA 및 병합
+
+사용자 제공 Antigravity 검증의 시작·종료 HEAD는 모두 `61b21b97308dc5a80b752e4affed7b05911d4f7a`다. 판정은 PASS다. image-core 6개, Tools 기본 69개·MySQL 17개, Backend 기본 28개·MySQL 28개로 총 148개를 통과했고 실패·오류·스킵은 없었다. 양쪽 Wrapper에서 공통 빌드와 Backend bootJar 의존성 격리를 확인했다. 추출 전후 JPEG·PNG 출력 바이트 및 SHA-256은 일치했고 `eclipse-temurin:21-jre` 컨테이너에서 변환에 성공했다. R2·SSRF·권리 승인 계약과 스모크 옵트인 차단을 확인했다. 병합 차단 0건, 비차단 P3 3건이다. 독립 환경의 전체 Docker 빌드는 아웃바운드 TLS 프록시 CA 문제로 완료하지 못했다. Windows와 ARM64 직접 검증은 미실행이다.
+
+별도 원격 증거인 Actions run 46019859779는 동일 HEAD에서 Docker 빌드·기동을 포함해 전체 통과했다. PR #14는 `a169feb8ae925d96f8e58e534724bf6206279b61`로 main에 병합됐다. P3 세 항목의 후속 처리는 IMG-03B-3 문서를 참조한다. [PR #14](https://github.com/ki-sd/SakeZuki/pull/14) · [원격 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46019859779) · [이미지 자산](IMG-03B-3_IMAGE_ASSETS.md)

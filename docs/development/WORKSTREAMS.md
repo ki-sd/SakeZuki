@@ -11,8 +11,8 @@
 | IMG-03A / 검증·변환·저장 | DONE / PR #9 병합 | main | Tools·CI / [저장 계약](IMG-03A_IMAGE_STORAGE.md) / 권리 및 운영 적용 별도 |
 | IMG-03A-IT / R2 실제 검증 | DONE / Windows 핵심 검증 통과 | main / PR #10 | Tools / [검증 기록](IMG-03A_IT_R2_SMOKE.md) / 읽기 전용 미실행·정리 미확인 |
 | IMG-03B-1 / 카탈로그 출처·호환성 | DONE | main / [PR #13](https://github.com/ki-sd/SakeZuki/pull/13) | Backend·Tools·Flyway / [전환 기록](IMG-03B-1_CATALOG_SOURCES.md) |
-| IMG-03B-2 / 공통 이미지 처리 모듈 | IN_REVIEW | main / feat/img-03b-2-image-core | Backend·Tools·Gradle·Docker / [모듈 기록](IMG-03B-2_IMAGE_CORE.md) |
-| IMG-03B-3 / 이미지 자산·Backend 이미지 제공 | PLANNED | IMG-03B-2 | Backend·Flyway / 자산과 공개 제공 |
+| IMG-03B-2 / 공통 이미지 처리 모듈 | DONE | main / [PR #14](https://github.com/ki-sd/SakeZuki/pull/14) | Backend·Tools·Gradle·Docker / [모듈 기록](IMG-03B-2_IMAGE_CORE.md) |
+| IMG-03B-3 / 이미지 자산·Backend 이미지 제공 | IN_REVIEW | main / feat/img-03b-3-image-assets | Backend·Flyway / [V10 자산과 공개 제공](IMG-03B-3_IMAGE_ASSETS.md) |
 | IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03B-3 | Tools / UGC와 공통 이미지 자산 / 별도 운영 승인 및 SLF4J 개선 검토 |
 | UGC-01 / 제보 스키마·Backend API | PLANNED | IMG-03B-3 | Backend·Flyway / 제보·리비전·첨부와 소유권 |
 | UGC-02 / 관리자 검토·승인 | PLANNED | UGC-01 | Backend·카탈로그·인증 / 공개 트랜잭션·권리·동시성 |
