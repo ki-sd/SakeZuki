@@ -5,6 +5,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -24,25 +25,33 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
     private final String bucket;
 
     public static R2ImageStorage fromEnvironment() {
-        String endpoint = required("R2_ENDPOINT");
+        return connect(required("R2_ENDPOINT"), required("R2_BUCKET"), System.getenv().getOrDefault("R2_REGION", "auto"),
+                required("R2_ACCESS_KEY_ID"), required("R2_SECRET_ACCESS_KEY"), null);
+    }
+
+    static R2ImageStorage connect(String endpoint, String bucket, String region, String accessKey, String secretKey,
+                                  ExecutionInterceptor observer) {
         if (!endpoint.matches("https://[a-f0-9]{32}\\.r2\\.cloudflarestorage\\.com/?")) {
             throw new IllegalArgumentException("R2_ENDPOINT must be an account HTTPS S3 endpoint");
         }
-        String bucket = requireBucket(required("R2_BUCKET"));
-        String region = System.getenv().getOrDefault("R2_REGION", "auto");
+        requireBucket(bucket);
         if (!"auto".equals(region)) {
             throw new IllegalArgumentException("R2_REGION must be auto");
         }
         S3Client client = S3Client.builder()
                 .endpointOverride(URI.create(endpoint)).region(Region.of(region)).forcePathStyle(true)
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
-                        required("R2_ACCESS_KEY_ID"), required("R2_SECRET_ACCESS_KEY"))))
+                        accessKey, secretKey)))
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
                 .httpClientBuilder(UrlConnectionHttpClient.builder()
                         .connectionTimeout(Duration.ofSeconds(3)).socketTimeout(Duration.ofSeconds(10)))
-                .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofSeconds(40))
-                        .apiCallAttemptTimeout(Duration.ofSeconds(15)))
+                .overrideConfiguration(c -> {
+                    c.apiCallTimeout(Duration.ofSeconds(40)).apiCallAttemptTimeout(Duration.ofSeconds(15));
+                    if (observer != null) {
+                        c.addExecutionInterceptor(observer);
+                    }
+                })
                 .build();
         return new R2ImageStorage(client, bucket);
     }

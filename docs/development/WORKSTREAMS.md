@@ -9,6 +9,7 @@
 | IMG-01 / 장애·출처 분석 | BLOCKED / 원본 조회 대기 | main / docs/img-01-image-source-analysis | [자료 조사·표본](IMG-01_IMAGE_SOURCES.md) / 승인된 접속 환경 / 운영 데이터 및 소스 수정 없음 |
 | IMG-02 / 상품 매핑 | 검토 대기 / 실데이터 확인 대기 | IMG-01 / feat/img-02-product-mapping | Tools·개발 문서 / [PR #8](https://github.com/ki-sd/SakeZuki/pull/8) / [dry-run 계약](IMG-02_PRODUCT_MAPPING.md) |
 | IMG-03A / 검증·변환·저장 | 검토 대기 | IMG-02 / feat/img-03a-image-storage | Tools·CI / [저장 계약](IMG-03A_IMAGE_STORAGE.md) / 권리 및 운영 적용 별도 |
+| IMG-03A-IT / R2 실제 검증 | Windows 실행 대기 | IMG-03A / test/img-03a-r2-smoke | Tools / [실행·정리 절차](IMG-03A_IT_R2_SMOKE.md) / 개발 버킷만 |
 | IMG-03B / DB·Flyway·API | PLANNED | IMG-03A | Backend·Flyway / 승인·권리 원장 및 메타데이터 |
 | IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03A/B | Tools / 실제 데이터·비용·공개 전환은 별도 승인 |
 | UI-01 / 탐색 UI | PLANNED / 미배정 | main / 미생성 / 미등록 | frontend / 합성 이미지 사용 / 이미지 DTO·공통 컴포넌트·lockfile 조율 |

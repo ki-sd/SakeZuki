@@ -64,16 +64,7 @@ public final class ImagePipeline {
             }
             var media = converted.transformed();
             var key = ImageStorage.ObjectKey.forImage(request.mapping().no(), media);
-            int length = media.byteLength();
-            var stored = storage.read(key, length);
-            boolean created = false;
-            if (stored.isEmpty()) {
-                created = storage.createIfAbsent(key, media.mimeType(), media.sha256(), converted.bytes());
-                stored = storage.read(key, length);
-            }
-            if (stored.isEmpty() || !verified(stored.get(), media)) {
-                throw new Failure(Status.STORAGE_FAILED, "stored_object_integrity_mismatch");
-            }
+            boolean created = storeVerified(storage, key, converted);
             return new Result(Status.STORED_VERIFIED, "stored_object_verified", null,
                     new Asset(source.finalUrl(), ImageTransform.VERSION, Media.from(converted.original()),
                             Media.from(media), key, created));
@@ -82,6 +73,22 @@ public final class ImagePipeline {
         } catch (IOException ex) {
             return new Result(Status.STORAGE_FAILED, "storage_io_failure", null, null);
         }
+    }
+
+    static boolean storeVerified(ImageStorage storage, ImageStorage.ObjectKey key, ImageTransform.Output converted)
+            throws IOException, Failure {
+        var media = converted.transformed();
+        int length = media.byteLength();
+        var stored = storage.read(key, length);
+        boolean created = false;
+        if (stored.isEmpty()) {
+            created = storage.createIfAbsent(key, media.mimeType(), media.sha256(), converted.bytes());
+            stored = storage.read(key, length);
+        }
+        if (stored.isEmpty() || !verified(stored.get(), media)) {
+            throw new Failure(Status.STORAGE_FAILED, "stored_object_integrity_mismatch");
+        }
+        return created;
     }
 
     private static boolean verified(ImageStorage.ObjectInfo stored, ImageTransform.Info expected) {
