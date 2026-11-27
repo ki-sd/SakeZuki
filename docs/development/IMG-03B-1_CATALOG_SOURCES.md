@@ -49,3 +49,24 @@ IMG-03B-2가 공유 이미지 처리 모듈, IMG-03B-3이 이미지 자산·Back
 사케 10,337건, 양조장 905건, 브랜드 1,525건의 Guide 출처를 확인했다. V5 업그레이드 시 기존 카탈로그·프로필·추천 fixture 행을 비교했다. V7의 잘못된 소유자 충돌을 주입했을 때 검사가 실패하며 V7 DML이 롤백되고 V6 DDL이 남았다. 충돌 행만 격리에서 제거하고 `repair → migrate`로 V8까지 통과했다. 첫 실행에서 발견한 기존 테스트의 V5 고정 건수 단언은 V8에 맞게 갱신했고, 추천 조건을 생략할 때 발생하는 기존 SQL 문제는 후속 과제로 기록했다. 추천 후보 검증은 모든 검색 조건을 제공하되 상품 프로필에는 NULL 수치를 유지했다.
 
 독립 리뷰 및 원격 CI 결과는 PR에서 확인해야 한다. 이 로컬 실행에는 브라우저 E2E와 공개 Docker 검증을 포함하지 않았다.
+
+## PR #13 독립 QA 후속
+
+Antigravity는 `e11a25caaa34f7aa31fa022f8ab8d10cb77b2acd`에 CONDITIONAL PASS를 보고했다. P2 두 건과 P3 세 건을 확인했다. Antigravity는 MySQL 8.4.13에서 직접 검증했으며 Maven Central 429로 자체 JUnit 실행은 완료하지 못했다. 별도로 같은 이전 HEAD의 GitHub Actions `verify`는 성공했다. 아래 회귀 검증 대상은 수정 코드 `64889b2915875da9190bb4fdac3ae61558e728cf`다. [이전 CI](https://github.com/ki-sd/SakeZuki/actions/runs/45989589906)
+
+| 발견 사항 | 해결 |
+| --- | --- |
+| P2 · V7 재진입 | CHECK 실패 시 TEMPORARY TABLE은 남을 수 있다. 생성 직전에 `DROP TEMPORARY TABLE IF EXISTS`를 추가했다. 같은 물리 연결에서 CONN ID를 대조하며 Flyway `repair → migrate`를 실행했다. V6 DDL은 유지되고 V7의 백필 DML은 실패 시 롤백됐으며 V8은 진행되지 않았다. 연결 교체를 복구 조건으로 삼지 않는다. |
+| P2 · 외부 키 소유권, 병합 차단 | 기존 코드는 요청 키를 잃고 upsert 뒤의 저장 키만 검사했다. 새 코드는 레거시 행을 먼저 잠근 뒤 요청 키 또는 레거시 collation상 동등한 범위를 인덱스 `FOR UPDATE`로 현재 읽기한다. 다른 소유자가 하나라도 있으면 저장을 롤백한다. 기존 bin UNIQUE와 저장 키 소유권 검사도 유지한다. |
+| P3 · 외부 키 입력 | Java·DB에서 빈 문자열, 경계 Unicode 공백, 제어 문자를 거부한다. Java는 SQL VARCHAR 한도와 잘못된 surrogate도 검사한다. 정상 키를 trim하거나 정규화하지 않는다. 전체 seed의 12,767개 키에는 대문자 0개, 비ASCII 6개, 새 규칙 위반 0개가 있었다. |
+| P3 · 통합 결과 수집 | Tools 실행 전 `cleanCatalogIntegrationTest`를 실행하고 생성된 XML을 합산한다. 파일 누락, 0건, 실패·오류·스킵이면 성공할 수 없다. Backend도 같은 집계 함수를 사용한다. 기존 GitHub Actions의 격리 실행기가 이 경로를 호출한다. |
+| P3 · 트랜잭션 정리 | 일반 예외와 Java `Error`에 대해 가능한 범위에서 원래 트랜잭션 또는 savepoint로 되돌린다. 정리 실패는 suppressed 예외로 보존하고 연결을 중단한다. 실패한 rollback 뒤 자동 커밋을 복구하지 않는다. |
+
+BREWERY·BRAND에만 레거시 비교용 비고유 생성키를 추가했다. bin 키를 소문자로 합치거나 collation을 변경하거나 추정 별칭을 영구 등록하는 대안은 기존 식별자를 바꿀 수 있어 채택하지 않았다. 일치하는 내부 소유자가 같은 경우 대소문자 변형 재수집은 유지한다. SAKE는 수집기의 정규 10진 ID를 정확히 조회한다. InnoDB의 REPEATABLE READ 또는 SERIALIZABLE을 쓰기 전제로 삼아 미존재 키의 인덱스 범위도 잠근다. READ COMMITTED에서는 쓰기를 거부한다. 독립 원장 쓰기가 먼저 커밋되면 현재 읽기가 충돌을 확인하며, 동일 키에 대한 경쟁에는 bin UNIQUE가 최종 경계를 제공한다. 교착이나 잠금 타임아웃이 발생하면 트랜잭션을 재검토하고 호출자가 재시도해야 한다. 앱 밖의 직접 SQL이 커밋 후 새로운 동등 키 충돌을 만들 수 있어 원장 쓰기 권한은 별도로 제한한다.
+
+### 회귀 증거와 재검증
+
+- 수정 전 소스의 A·B 회귀 테스트에서 모두 거부 예외가 나오지 않아 2건 실패했다. 수정 전 V7의 같은 물리 세션 재실행에서 MySQL 오류 1050을 확인했다.
+- 수정 후 `python3 scripts/test_auth_integration.py`는 격리 MySQL 8.4.13에서 Backend 기본 28, Backend·MySQL 28, Tools·MySQL 13개를 통과했다. `cd tools && bash ./gradlew --no-daemon cleanTest test`는 Tools 기본 66개를 통과했다. 실패·오류·스킵은 0이다. XML 검증은 누락·0건·실패·오류·스킵 fixture가 거부되는 것도 확인했다.
+- Antigravity에는 PR #13의 새 HEAD에서 동일 세션 재시도, A·B, 악센트·탁점·Unicode 표현, 경쟁 쓰기, 코드의 rollback과 실제 결과를 다시 대조할 수 있도록 이 절차를 인계한다. 새 HEAD의 독립 검증 결과는 아직 없다. 기존 CI와 새 실행은 PR Checks에서 SHA별로 구분한다.
+- 기존 추천 SQL의 브랜드 없는 상품 양조장 조인·조건 생략 문제 해소와 구버전 Tools 쓰기 권한 차단은 UGC 운영 활성화 선행 조건으로 남는다. 운영 DB 및 실제 외부 서비스 검증은 이 변경에 포함하지 않았다.
