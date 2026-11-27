@@ -2,9 +2,9 @@
 
 저장소는 `ki-sd/SakeZuki`, 기준은 원격 `main`이다. [공통 규칙](../../AGENTS.md)의 시작 순서에 따라 필요한 문서를 읽고, 실제 브랜치·HEAD·작업 트리·원격 PR을 확인한다.
 
-- 기록 기준 main은 `35029601ec34dc1f89768764bf5ec7fe14def01d`이며 개발 문서 PR #5가 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #5](https://github.com/ki-sd/SakeZuki/pull/5)
+- 기록 기준 main은 `a1cd5dd64ff92c0e2fb3e200d26e971fc7e58b76`이며 DEV-01 문서 PR #6이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #6](https://github.com/ki-sd/SakeZuki/pull/6)
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
-- 다음은 [IMG-01](ROADMAP.md)의 외부 이미지 장애·출처·권리 조사다. 운영 접근 없이 진행하며 합성 데이터 UI 검증은 UI-01에서 다룬다.
+- [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. IMG-02의 표본 매핑, IMG-03의 합성 데이터 설계 조건은 조사 문서를 참조한다.
 - 운영 장애, 본인확인/PG·이미지 권리, 운영 SHA는 [현재 상태](PROJECT_STATE.md)에서 확인한다. 실키, 외부 API 호출, R2 실제 업로드, 배포 등은 [승인 범위](../../AGENTS.md)를 따른다.
 
 ## 중단 시 체크포인트
@@ -17,4 +17,4 @@
 
 ## 새 에이전트에 전달할 시작 문장
 
-> ki-sd/SakeZuki의 최신 main을 기준으로 AGENTS.md와 인수인계 문서를 읽고 IMG-01을 수행해 줘. 현재 브랜치와 PR을 확인한 뒤 DEV-01 기준선 기록을 확인하고 IMG-01의 외부 이미지 장애·출처·권리 조사 범위를 정리해 줘.
+> ki-sd/SakeZuki의 최신 main을 기준으로 AGENTS.md와 인수인계 문서를 읽고 IMG-01을 수행해 줘. 현재 브랜치와 PR을 확인한 뒤 DEV-01 기준선 기록을 확인하고 IMG-01의 미확인 원본 응답과 공식 이용 조건을 조사해 줘.
