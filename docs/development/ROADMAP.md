@@ -11,9 +11,9 @@
 | IMG-03A-IT / P1 | Windows 개발 버킷 R2 스모크 · DONE | 핵심 검증 완료. 읽기 전용 권한 미실행, 테스트 객체 정리 미확인 | [검증 기록](IMG-03A_IT_R2_SMOKE.md) · 개발 버킷 |
 | IMG-03B-1 / P1 | 카탈로그 출처·레거시 호환성 · DONE | 출처 FK, backfill, Tools 경계 | [전환 기록](IMG-03B-1_CATALOG_SOURCES.md) · 미적용 |
 | IMG-03B-2 / P1 | Tools·Backend 공통 이미지 처리 모듈 · DONE | IMG-03B-1 이후. Gradle·Docker 호환 검증 | [모듈 기록](IMG-03B-2_IMAGE_CORE.md) · 미적용 |
-| IMG-03B-3 / P1 | 이미지 자산 메타데이터·Backend 이미지 제공 · IN_REVIEW | V10 자산·권리, 검증 저장 및 공개 제공 | [이미지 자산](IMG-03B-3_IMAGE_ASSETS.md) · 미적용 |
+| IMG-03B-3 / P1 | 이미지 자산 메타데이터·Backend 이미지 제공 · DONE | V10 자산·권리, 검증 저장 및 공개 제공 | [이미지 자산](IMG-03B-3_IMAGE_ASSETS.md) · 미적용 |
 | IMG-03C / P1 | 마이그레이션 실행기·멱등성·실패 복구·롤백 · PLANNED | IMG-03B-3 공통 이미지 자산 사용. 실제 데이터는 권리 및 승인 필요. SLF4J 개선 검토 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
-| UGC-01 / P1 | 사용자 제보 스키마 및 Backend API · PLANNED | IMG-03B-3. 제출, 리비전, 첨부, 소유자 API 및 제한 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
+| UGC-01 / P1 | 사용자 제보 스키마 및 Backend API · IN_REVIEW | IMG-03B-3. 제출, 리비전, 첨부, 소유자 API 및 제한 | [제보 API](UGC-01_SUBMISSIONS.md) · 미적용 |
 | UGC-02 / P1 | 관리자 검토 및 승인 워크플로 · PLANNED | UGC-01. 역할, 중복, 권리 확인 및 공개 트랜잭션 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
 | UGC-03 / P1 | 사용자·관리자 Frontend 화면 · PLANNED | UGC-01/02. 등록·보완·검수 화면 E2E | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
 | UI-01 / P1 | 검색 중심 홈·공통 이미지 처리·E2E/시각 QA · PLANNED | 테스트 이미지로 IMG-03과 독립 진행 가능. 검색/상세·404/대체 이미지·모바일·키보드 회귀 확인. 빌드 시 Google Fonts 의존성을 제거할 수 있도록 기존 라이선스와 디자인을 보존하는 `next/font/local` 전환 검토 | 미등록 · 미적용 |
