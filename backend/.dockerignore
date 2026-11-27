@@ -3,3 +3,5 @@ build
 .idea
 *.iml
 *.log
+image-core/.gradle
+image-core/build

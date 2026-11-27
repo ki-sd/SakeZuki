@@ -8,6 +8,8 @@ COPY gradle gradle
 COPY build.gradle .
 COPY settings.gradle .
 COPY src src
+COPY image-core/build.gradle image-core/settings.gradle image-core/
+COPY image-core/src/main image-core/src/main
 
 RUN chmod +x gradlew
 RUN ./gradlew bootJar --no-daemon

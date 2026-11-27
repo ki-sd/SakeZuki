@@ -1,5 +1,7 @@
 package com.sakezuki.tools.images;
 
+import com.sakezuki.imagecore.ImageFailure;
+import com.sakezuki.imagecore.ImageTransform;
 import okhttp3.ConnectionPool;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -28,7 +30,6 @@ import java.util.stream.Collectors;
 import static com.sakezuki.tools.images.ImagePipeline.Status.*;
 
 public final class SecureImageDownload {
-    static final int MAX_BYTES = 12 * 1024 * 1024;
     private static final int MAX_REDIRECTS = 3;
     private static final int MAX_ATTEMPTS = 3;
     private static final Duration MAX_RETRY_WAIT = Duration.ofSeconds(5);
@@ -69,7 +70,7 @@ public final class SecureImageDownload {
         this.sleeper = sleeper;
     }
 
-    Download download(URI original, Set<URI> permittedUrls) throws ImagePipeline.Failure {
+    Download download(URI original, Set<URI> permittedUrls) throws ImagePipeline.Failure, ImageFailure {
         Duration delay = Duration.ZERO;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             if (!delay.isZero()) {
@@ -102,7 +103,7 @@ public final class SecureImageDownload {
         throw new IllegalStateException("download attempt budget exhausted");
     }
 
-    private Step follow(URI original, Set<URI> permittedUrls) throws ImagePipeline.Failure, IOException {
+    private Step follow(URI original, Set<URI> permittedUrls) throws ImagePipeline.Failure, ImageFailure, IOException {
         URI current = original;
         for (int hops = 0; hops <= MAX_REDIRECTS; hops++) {
             String host = requireHost(current);
@@ -127,7 +128,7 @@ public final class SecureImageDownload {
         throw new ImagePipeline.Failure(INVALID_SOURCE, "redirect_limit");
     }
 
-    private Step inspect(URI current, Response response) throws ImagePipeline.Failure, IOException {
+    private Step inspect(URI current, Response response) throws ImagePipeline.Failure, ImageFailure, IOException {
         int status = response.status();
         if (REDIRECTS.contains(status)) {
             try {
@@ -155,11 +156,11 @@ public final class SecureImageDownload {
         }
         String contentType = ImageTransform.requireMime(response.header("Content-Type"));
         long advertised = contentLength(response.header("Content-Length"));
-        if (advertised > MAX_BYTES) {
+        if (advertised > ImageTransform.MAX_BYTES) {
             throw new ImagePipeline.Failure(INVALID_IMAGE, "download_byte_limit");
         }
-        byte[] bytes = response.body().readNBytes(MAX_BYTES + 1);
-        if (bytes.length > MAX_BYTES) {
+        byte[] bytes = response.body().readNBytes(ImageTransform.MAX_BYTES + 1);
+        if (bytes.length > ImageTransform.MAX_BYTES) {
             throw new ImagePipeline.Failure(INVALID_IMAGE, "download_byte_limit");
         }
         if (advertised >= 0 && bytes.length != advertised) {

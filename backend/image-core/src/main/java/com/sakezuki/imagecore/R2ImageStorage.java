@@ -1,4 +1,4 @@
-package com.sakezuki.tools.images;
+package com.sakezuki.imagecore;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -29,7 +29,7 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
                 required("R2_ACCESS_KEY_ID"), required("R2_SECRET_ACCESS_KEY"), null);
     }
 
-    static R2ImageStorage connect(String endpoint, String bucket, String region, String accessKey, String secretKey,
+    public static R2ImageStorage connect(String endpoint, String bucket, String region, String accessKey, String secretKey,
                                   ExecutionInterceptor observer) {
         if (!endpoint.matches("https://[a-f0-9]{32}\\.r2\\.cloudflarestorage\\.com/?")) {
             throw new IllegalArgumentException("R2_ENDPOINT must be an account HTTPS S3 endpoint");
@@ -63,7 +63,7 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
 
     @Override
     public boolean createIfAbsent(ObjectKey key, String contentType, String sha256, byte[] bytes) throws IOException {
-        if (bytes.length == 0 || bytes.length > SecureImageDownload.MAX_BYTES
+        if (bytes.length == 0 || bytes.length > ImageTransform.MAX_BYTES
                 || !ImageTransform.sha256(bytes).equals(sha256)
                 || !(ImageTransform.PNG.equals(contentType) && key.value().endsWith("/" + sha256 + ".png")
                 || ImageTransform.JPEG.equals(contentType) && key.value().endsWith("/" + sha256 + ".jpg"))) {
@@ -86,7 +86,7 @@ public final class R2ImageStorage implements ImageStorage, AutoCloseable {
 
     @Override
     public Optional<ObjectInfo> read(ObjectKey key, int maxBytes) throws IOException {
-        if (maxBytes <= 0 || maxBytes > SecureImageDownload.MAX_BYTES) {
+        if (maxBytes <= 0 || maxBytes > ImageTransform.MAX_BYTES) {
             throw new IOException("invalid object read limit");
         }
         try (var input = client.getObject(GetObjectRequest.builder().bucket(bucket).key(key.value()).build())) {

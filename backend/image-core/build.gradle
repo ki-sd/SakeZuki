@@ -1,0 +1,58 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'com.sakezuki'
+version = '1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    def awsVersion = '2.42.12'
+    api "software.amazon.awssdk:sdk-core:${awsVersion}"
+    implementation "software.amazon.awssdk:s3:${awsVersion}"
+    implementation "software.amazon.awssdk:url-connection-client:${awsVersion}"
+    testImplementation platform('org.junit:junit-bom:6.0.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    mustRunAfter 'cleanTest'
+}
+
+tasks.register('verifyTestReports') {
+    dependsOn tasks.named('test')
+    doLast {
+        def directory = tasks.named('test', Test).get().reports.junitXml.outputLocation.get().asFile
+        def suites = fileTree(directory).matching { include 'TEST-*.xml' }
+        def parser = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        parser.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)
+        if (suites.isEmpty() || suites.any { file ->
+            def suite = parser.newDocumentBuilder().parse(file).documentElement
+            ['tests', 'failures', 'errors', 'skipped'].any { name ->
+                int count = suite.getAttribute(name).toInteger()
+                name == 'tests' ? count == 0 : count != 0
+            }
+        }) {
+            throw new GradleException('Image core tests are missing or unsuccessful.')
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyTestReports')
+}

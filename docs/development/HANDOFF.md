@@ -2,12 +2,12 @@
 
 저장소는 `ki-sd/SakeZuki`, 기준은 원격 `main`이다. [공통 규칙](../../AGENTS.md)의 시작 순서에 따라 필요한 문서를 읽고, 실제 브랜치·HEAD·작업 트리·원격 PR을 확인한다.
 
-- 기록 기준 main은 `1db9b4d1ece9710f42138b01e062634cfeb58226`이며 UGC 설계 PR #12가 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #12](https://github.com/ki-sd/SakeZuki/pull/12)
+- 기록 기준 main은 `ea1f42d27811808a26e9eaccf43f324dd841157f`이며 IMG-03B-1 PR #13이 병합됐다. 세션 시작 시 원격 main과 열린 PR을 다시 확인한다. [PR #13](https://github.com/ki-sd/SakeZuki/pull/13)
 - DEV-01은 게시된 Cloud 환경의 복원과 개발 기준선을 확인했다. 실제 명령·대상 SHA·Cloud Docker 빌드 제약 및 CI 결과는 [Cloud 기준선 기록](CLOUD_SETUP.md#dev-01-cloud-기준선)을 참조한다.
 - [IMG-01](IMG-01_IMAGE_SOURCES.md)에서 기존 이미지 구조와 시드, 표본을 정리했다. 승인된 접속 환경에서 원본 응답과 공식 약관 확인을 이어간다. [IMG-02 dry-run](IMG-02_PRODUCT_MAPPING.md)은 합성 입력으로 검증했다. 실제 후보 검수와 이용 조건 확인이 남아 있다. IMG-02와 IMG-03A는 PR #9를 통해 main에 반영됐다.
 - [IMG-03A](IMG-03A_IMAGE_STORAGE.md)는 Tools에서 합성 이미지를 검증·변환하고 모의 저장 응답의 무결성을 확인했다. IMG-03B는 [출처·호환성](IMG-03B-1_CATALOG_SOURCES.md), 공통 이미지 처리 모듈, 이미지 자산·Backend 제공으로 나뉜다. 실이미지 처리는 이용 허가와 상품 승인 확인이 필요하다.
 - [IMG-03A-IT](IMG-03A_IT_R2_SMOKE.md)의 핵심 검증은 사용자의 Windows 실행에서 통과했다. 읽기 전용 권한 검증은 미실행이고 테스트 객체 정리 여부는 확인 대기다.
-- [카탈로그 제보·IMG-03B 설계](UGC_CATALOG_ARCHITECTURE.md)에서 제보와 공개 카탈로그 분리, IMG-03C와 UGC의 공통 자산 계약, UGC-01/02/03의 구현 범위를 제안했다. IMG-03B-1 전환 기록을 검토한 뒤 IMG-03B-2의 공통 모듈을 별도 PR로 진행한다.
+- [카탈로그 제보·IMG-03B 설계](UGC_CATALOG_ARCHITECTURE.md)에서 제보와 공개 카탈로그 분리, IMG-03C와 UGC의 공통 자산 계약, UGC-01/02/03의 구현 범위를 제안했다. [IMG-03B-2 공통 모듈](IMG-03B-2_IMAGE_CORE.md) 검토 후 IMG-03B-3에서 이미지 자산 메타데이터와 제공 API를 진행한다.
 - 운영 장애, 본인확인/PG·이미지 권리, 운영 SHA는 [현재 상태](PROJECT_STATE.md)에서 확인한다. 실키, 외부 API 호출, R2 실제 업로드, 배포 등은 [승인 범위](../../AGENTS.md)를 따른다.
 
 ## 중단 시 체크포인트
@@ -20,4 +20,4 @@
 
 ## 새 에이전트에 전달할 시작 문장
 
-> 최신 main과 열린 PR을 확인한 뒤 IMG-03B-1 전환 기록과 UGC 설계를 읽어 줘. IMG-03B-2에서는 기존 Tools 이미지 검증·변환·저장 계약을 Backend와 공유할 모듈로 추출하고 두 Wrapper 및 Docker 빌드를 확인해 줘. 이미지 제공 API와 자산 메타데이터는 IMG-03B-3에서 진행해 줘.
+> 최신 main과 열린 PR에서 IMG-03B-2의 병합·QA 상태를 확인한 뒤 공통 이미지 모듈과 UGC 설계를 읽어 줘. IMG-03B-3에서는 공통 검증·변환·저장을 재사용하고, Backend에서 승인된 자산의 메타데이터와 접근 정책을 구현해 줘. UGC 운영 전에는 기존 추천 SQL과 구버전 Tools 쓰기 차단, V9 잠금 계약을 확인해 줘.

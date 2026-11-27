@@ -1,4 +1,4 @@
-package com.sakezuki.tools.images;
+package com.sakezuki.imagecore;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -14,7 +14,7 @@ public interface ImageStorage {
             Long.parseLong(value.split("/")[1]);
         }
 
-        static ObjectKey forImage(long no, ImageTransform.Info image) {
+        public static ObjectKey forImage(long no, ImageTransform.Info image) {
             String suffix = ImageTransform.PNG.equals(image.mimeType()) ? ".png" : ".jpg";
             return new ObjectKey("sake/" + no + "/" + ImageTransform.VERSION + "/" + image.sha256() + suffix);
         }

@@ -1,4 +1,4 @@
-package com.sakezuki.tools.images;
+package com.sakezuki.imagecore;
 
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class R2ImageStorageTest {
     @Test
     void sendsConditionalPutAndTreatsPreconditionFailureAsAlreadyExists() throws IOException {
-        byte[] bytes = ImagePipelineTest.image("png", 5, 5);
+        byte[] bytes = ImageFixtures.png(5, 5);
         String sha = ImageTransform.sha256(bytes);
         var key = new ImageStorage.ObjectKey("sake/1/image-v1/" + sha + ".png");
         var requests = new AtomicInteger();
@@ -50,7 +50,7 @@ class R2ImageStorageTest {
 
     @Test
     void hashesDownloadedBytesSeparatelyFromMetadataAndBoundsReadBack() throws IOException {
-        byte[] bytes = ImagePipelineTest.image("png", 5, 5);
+        byte[] bytes = ImageFixtures.png(5, 5);
         String sha = ImageTransform.sha256(bytes);
         var key = new ImageStorage.ObjectKey("sake/1/image-v1/" + sha + ".png");
         var storage = new R2ImageStorage(s3((method, args) -> {
