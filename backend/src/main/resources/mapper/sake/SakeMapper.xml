@@ -19,6 +19,8 @@
         <result property="acidity" column="acidity"/>
         <result property="alcoholPercentage" column="alcoholPercentage"/>
         <result property="imageUrl" column="imageUrl"/>
+        <result property="capacityMl" column="capacityMl"/>
+        <result property="variant" column="variant"/>
 
         <!-- 브랜드 정보 -->
         <association property="brand" javaType="com.sakezuki.backend.sake.dto.BrandResponse">
@@ -107,6 +109,8 @@
             s.sake_meter_value AS sakeMeterValue,
             s.acidity,
             s.alcohol_percentage AS alcoholPercentage,
+            s.capacity_ml AS capacityMl,
+            s.variant,
             <include refid="com.sakezuki.backend.image.CatalogImageMapper.catalogUrl"/> AS imageUrl,
             ba.name_ja AS brandNameJa,
             ba.name_kana AS brandNameKana,

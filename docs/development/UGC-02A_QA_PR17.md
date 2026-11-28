@@ -1,6 +1,6 @@
 # UGC-02A PR #17 독립 QA 후속 수정
 
-기준 main은 `63a8d1de1bd82403953efb5fb88eada58f5cf303`이다. 사용자가 제공한 Antigravity의 **CONDITIONAL PASS**는 `3e90794bdbf63e3b249613de56b36045ef8d715b`에 해당한다. 공식 JVM 테스트 200/200, 독립 프로브 145/145, 실측 관찰 11건이었다. P0/P1은 0건, P2는 1건, P3는 4건이었다. 관리자의 실시간 역할 검증, 정상 잠금 순서에서 양방향 역할 철회 경쟁, 결정 멱등성과 감사 롤백, 사용자 동의, 미리보기 TOCTOU 10종, 공개 카탈로그 격리가 독립 검증을 통과했다. 이 판정은 후속 수정 HEAD에 승계되지 않는다. 후속 HEAD의 독립 QA는 대기 중이다. [이전 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46127942548) · [현재 PR 검사](https://github.com/ki-sd/SakeZuki/pull/17/checks)
+기준 main은 `63a8d1de1bd82403953efb5fb88eada58f5cf303`이다. 사용자가 제공한 Antigravity의 **CONDITIONAL PASS**는 `3e90794bdbf63e3b249613de56b36045ef8d715b`에 해당한다. 공식 JVM 테스트 200/200, 독립 프로브 145/145, 실측 관찰 11건이었다. P0/P1은 0건, P2는 1건, P3는 4건이었다. 관리자의 실시간 역할 검증, 정상 잠금 순서에서 양방향 역할 철회 경쟁, 결정 멱등성과 감사 롤백, 사용자 동의, 미리보기 TOCTOU 10종, 공개 카탈로그 격리가 독립 검증을 통과했다. 이 판정은 후속 수정 HEAD에 승계되지 않는다. 후속 HEAD의 최종 독립 판정과 병합 증거는 아래 기록에 있다. [이전 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46127942548) · [현재 PR 검사](https://github.com/ki-sd/SakeZuki/pull/17/checks)
 
 ## P2-1 관리자 검색의 JSON null
 
@@ -38,3 +38,7 @@
 실제 HTTP와 격리 MySQL로 관리자 검색의 JSON null·누락·실제 문자열·길이 경계·이스케이프·페이지, 제안 관계의 후보 순위와 비교 기준, 출처 0/199/200/201건 및 단일 후보 205건과 뒤 후보의 출처 절단을 추가 검증한다. 로컬 명령은 Tools의 `bash ./gradlew --no-daemon :image-core:cleanTest cleanTest test`, Backend의 `bash ./gradlew --no-daemon bootJar`, 저장소 루트의 `python3 scripts/test_auth_integration.py --e2e`다. JVM 203건은 image-core 11, Tools 기본 69·MySQL 17, Backend 기본 28·MySQL 78건이다. 기존 200건과 새 HTTP 통합 테스트 3건을 포함하며 실패·오류·스킵은 각각 0건이다. Chromium 11건과 bootJar도 통과했다. 수정 diff에서 V1–V12의 변경은 0건이다. CI의 Frontend와 Linux Docker 검증 결과는 최종 HEAD와 함께 PR에 기록한다.
 
 최신 HEAD에서는 검색 정렬과 페이지, 대표 후보 계획과 실행 비용, 절단 응답 해석에 집중해 독립 QA를 진행한다. 운영 접근 및 실제 R2 호출은 검증에 사용하지 않았다. [PR 검사와 실행 SHA](https://github.com/ki-sd/SakeZuki/pull/17/checks)
+
+## 최종 독립 QA와 병합
+
+사용자가 제공한 Antigravity 최종 QA는 `6671f280e29f5bc424b207d1a064bad4eb68b79e`에서 **PASS**였다. 공식 JVM 203/203, 독립 집중 프로브 70/70, 추가 실측 관찰 7건이었다. P2-1과 P3-1·P3-2·P3-3은 해결 판정이며 P3-4는 비차단 운영 계약으로 인계됐다. 신규 병합 차단 결함은 0건이었다. Frontend 16/16, Chromium 11/11, Linux Docker HTTP/HTTPS는 Antigravity 직접 실행 대신 같은 HEAD의 원격 CI에서 확인한 결과다. GitHub PR API와 원격 main에서 병합 커밋 `aca186edd146dae725ad68f34a757a00a5b714b9`를 확인했다. [PR #17](https://github.com/ki-sd/SakeZuki/pull/17) · [원격 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46132717380)

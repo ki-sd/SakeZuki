@@ -64,6 +64,7 @@ class UgcMySqlTests {
     @Autowired com.sakezuki.backend.image.ImageAssetService images;
     @Autowired ImageStores stores;
     @Autowired PlatformTransactionManager manager;
+    @Autowired com.sakezuki.backend.recommend.mapper.RecommendMapper recommendations;
     private final HttpClient http = HttpClient.newHttpClient();
 
     @DynamicPropertySource
@@ -1122,6 +1123,289 @@ class UgcMySqlTests {
         assertEquals(truncated,result.path("sourcesTruncated").booleanValue());
         assertEquals(first,result.path("candidates").get(0).path("sourceIdentifiers").size());
         assertEquals(second,result.path("candidates").get(1).path("sourceIdentifiers").size());
+    }
+
+    @Test
+    void approvesTheReviewedRevisionAndReplaysItsOriginalCatalogReceipt() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        var data = catalogDraft("承認");
+        String name = ((Map<?, ?>) data.get("sake")).get("ja").toString();
+        data.put("designation","合成推薦型");
+        data.put("sakeMeter",Map.of("min",-1000,"max",-1.123));
+        data.put("acidity",Map.of("min",2.123));
+        data.put("alcoholPercent",Map.of("min",15.125));
+        data.put("riceJa","合成米");
+        data.put("riceKo","합성 쌀");
+        data.put("yeastJa","合成酵母");
+        data.put("yeastKo","합성 효모");
+        data.put("capacityMl",720);
+        data.put("variant","合成限定版");
+        data.put("sourceUrl","https://example.invalid/catalog");
+        String id = submit(owner,data);
+        assertEquals(0,countCatalogName(name));
+        UUID key = UUID.randomUUID();
+        assertEquals(401,approve(null,id,key,0,1).statusCode());
+        assertEquals(403,approve(owner,id,key,0,1).statusCode());
+        assertEquals(409,approve(admin,id,key,1,1).statusCode());
+        assertEquals(409,approve(admin,id,key,0,2).statusCode());
+        assertEquals(422,post(admin,adminPath(id)+"/approvals",key,
+                Map.of("expectedVersion",0,"revisionNo",1,"reason","검수","identityConfirmed",false)).statusCode());
+        assertEquals(422,post(admin,adminPath(id)+"/approvals",key,
+                Map.of("expectedVersion",0,"revisionNo",1,"reason","검수","identityConfirmed",true,"data",data)).statusCode());
+
+        var approved = approve(admin,id,key,0,1);
+        assertEquals(200,approved.statusCode(),string(approved));
+        var receipt = node(approved);
+        long sake = receipt.path("sakeNo").longValue();
+        assertEquals("APPROVED",receipt.path("status").asString());
+        assertEquals(1,receipt.path("version").intValue());
+        assertEquals(1,receipt.path("currentRevision").intValue());
+        assertFalse(receipt.path("approvedAt").asString().isBlank());
+        assertEquals(receipt,node(approve(admin,id,key,0,1)));
+        assertEquals(409,approve(admin,id,UUID.randomUUID(),0,1).statusCode());
+        assertEquals(409,post(admin,adminPath(id)+"/approvals",key,
+                Map.of("expectedVersion",0,"revisionNo",1,"reason","다른 사유","identityConfirmed",true)).statusCode());
+        assertEquals(1,countCatalogName(name));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_EVENT WHERE submission_id=? AND next_status='APPROVED' AND actor_no=?",
+                Integer.class,id,admin.no()));
+        assertEquals(1,db.queryForObject("""
+                SELECT COUNT(*) FROM SAKE_SOURCE WHERE sake_no=? AND source_system='USER_SUBMISSION'
+                  AND external_key IS NULL AND review_status='UNREVIEWED' AND canonical_url=? AND evidence_ref=?
+                """,Integer.class,sake,"https://example.invalid/catalog","submission:"+id+"/revision:1"));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE no=? AND source_id IS NULL AND image_url IS NULL AND brand_no IS NULL",Integer.class,sake));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SAKE_IMAGE WHERE sake_no=?",Integer.class,sake));
+        assertEquals("-1000 ~ -1.123",db.queryForObject("SELECT sake_meter_value FROM SAKE WHERE no=?",String.class,sake));
+        assertEquals("-1.123",db.queryForObject("SELECT CAST(sake_meter_max AS CHAR) FROM SAKE_RECOMMEND_PROFILE WHERE sake_no=?",String.class,sake));
+        assertEquals("2.123",db.queryForObject("SELECT CAST(acidity_max AS CHAR) FROM SAKE_RECOMMEND_PROFILE WHERE sake_no=?",String.class,sake));
+        assertNull(db.queryForObject("SELECT polishing_ratio_min FROM SAKE_RECOMMEND_PROFILE WHERE sake_no=?",java.math.BigDecimal.class,sake));
+
+        var detail = get(null,"/api/sake/"+sake);
+        assertEquals(200,detail.statusCode());
+        assertEquals(name,node(detail).path("nameJa").asString());
+        assertEquals(720,node(detail).path("capacityMl").intValue());
+        assertEquals("合成限定版",node(detail).path("variant").asString());
+        assertTrue(node(detail).path("imageUrl").isNull());
+        var list = get(null,"/api/sake/list?fd="+java.net.URLEncoder.encode(name,StandardCharsets.UTF_8));
+        assertEquals(200,list.statusCode());
+        assertTrue(string(list).contains(name));
+        assertRecommendationForApprovedSake(sake);
+
+        // Decision keys and approval keys are independent namespaces for the same administrator.
+        String other = submit(member("ROLE_USER"),catalogDraft("比較"));
+        assertEquals(409,approve(admin,other,key,0,1).statusCode());
+        assertEquals(200,decideAsAdmin(admin,other,key,"REJECT",0,1).statusCode());
+        db.update("DELETE FROM MEMBER_AUTHORITY WHERE member_no=? AND authority='ROLE_ADMIN'",admin.no());
+        assertEquals(403,approve(admin,id,key,0,1).statusCode());
+    }
+
+    @Test
+    void preservesImageHistoryAndRequiresAnExplicitlyImageFreeAdminRevision() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String image = uploadedAsset(owner);
+        var data = catalogDraft("画像");
+        data.putAll(Map.of("attachmentId",image,"imageRights","합성 이미지","imageConsent",true));
+        String id = submit(owner,data);
+        assertEquals(409,approve(admin,id,UUID.randomUUID(),0,1).statusCode());
+        for (String field : List.of("attachmentId","imageRights","imageConsent")) data.remove(field);
+        assertEquals(201,reviseAsAdmin(admin,id,0,data).statusCode());
+        assertEquals(409,approve(admin,id,UUID.randomUUID(),1,1).statusCode());
+        var approved = approve(admin,id,UUID.randomUUID(),1,2);
+        assertEquals(200,approved.statusCode(),string(approved));
+        assertEquals(2,node(approved).path("currentRevision").intValue());
+        assertEquals(image,db.queryForObject("SELECT attachment_id FROM SUBMISSION_REVISION WHERE submission_id=? AND revision_no=1",String.class,id));
+        assertNull(db.queryForObject("SELECT attachment_id FROM SUBMISSION_REVISION WHERE submission_id=? AND revision_no=2",String.class,id));
+    }
+
+    @Test
+    void blocksLegacyAndNormalizedProductCollisionsAndValidatesRelationOwnership() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        var sample = db.queryForMap("SELECT brewery_no,name_ja FROM SAKE WHERE no=1");
+        var duplicate = catalogDraft("既存");
+        duplicate.put("sake",Map.of("ja","　"+sample.get("name_ja")+"　","ko","다른 표시명"));
+        duplicate.put("brewery",Map.of("existingNo",sample.get("brewery_no")));
+        duplicate.put("variant","합성 별도 변형");
+        duplicate.put("capacityMl",360);
+        assertEquals(409,approve(admin,submit(member("ROLE_USER"),duplicate),UUID.randomUUID(),0,1).statusCode());
+
+        var existingBrewery = db.queryForMap("SELECT name_ja,name_ko FROM BREWERY WHERE no=1");
+        var proposedBrewery = catalogDraft("蔵競合");
+        proposedBrewery.put("brewery",proposed(existingBrewery.get("name_ja"),"다른 이름"));
+        assertEquals(409,approve(admin,submit(member("ROLE_USER"),proposedBrewery),UUID.randomUUID(),0,1).statusCode());
+        var existingBrand = db.queryForMap("SELECT no,brewery_no,name_ja FROM BRAND ORDER BY no LIMIT 1");
+        var proposedBrand = catalogDraft("銘競合");
+        proposedBrand.put("brewery",Map.of("existingNo",existingBrand.get("brewery_no")));
+        proposedBrand.put("brand",proposed(existingBrand.get("name_ja"),"다른 이름"));
+        assertEquals(409,approve(admin,submit(member("ROLE_USER"),proposedBrand),UUID.randomUUID(),0,1).statusCode());
+        var wrongBrewery = db.queryForObject("SELECT no FROM BREWERY WHERE no<>? LIMIT 1",Long.class,existingBrand.get("brewery_no"));
+        proposedBrand.put("brewery",Map.of("existingNo",wrongBrewery));
+        String differentOwner = submit(member("ROLE_USER"),proposedBrand);
+        assertEquals(200,approve(admin,differentOwner,UUID.randomUUID(),0,1).statusCode());
+        proposedBrand.put("brand",Map.of("existingNo",existingBrand.get("no")));
+        assertEquals(422,post(member("ROLE_USER"),ROOT,UUID.randomUUID(),proposedBrand).statusCode());
+    }
+
+    @Test
+    void registersOneProductWhenTwoAdminsCompeteForOneIdentity() throws Exception {
+        var firstAdmin = member("ROLE_ADMIN");
+        var secondAdmin = member("ROLE_ADMIN");
+        String suffix = UUID.randomUUID().toString();
+        var one = catalogDraft("同一名称");
+        var two = catalogDraft("同一名称");
+        one.put("sake",Map.of("ja","Ａ  同一商品"+suffix,"ko","일본어 식별"));
+        two.put("sake",Map.of("ja","a 同一商品"+suffix,"ko","다른 번역"));
+        String first = submit(member("ROLE_USER"),one);
+        String second = submit(member("ROLE_USER"),two);
+        var lock = new org.springframework.transaction.support.TransactionTemplate(manager);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var results = lock.execute(status -> {
+                db.queryForObject("SELECT id FROM GUIDE_CATALOG_WRITE_MUTEX WHERE id=1 FOR UPDATE",Integer.class);
+                var a = pool.submit(() -> approve(firstAdmin,first,UUID.randomUUID(),0,1).statusCode());
+                var b = pool.submit(() -> approve(secondAdmin,second,UUID.randomUUID(),0,1).statusCode());
+                long deadline = System.nanoTime()+TimeUnit.SECONDS.toNanos(10);
+                String waiting = """
+                        SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB=DATABASE()
+                          AND ID<>CONNECTION_ID() AND INFO='SELECT id FROM GUIDE_CATALOG_WRITE_MUTEX WHERE id=1 FOR UPDATE'
+                        """;
+                while (db.queryForObject(waiting,Integer.class)<2 && System.nanoTime()<deadline) {
+                    java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+                }
+                assertEquals(2,db.queryForObject(waiting,Integer.class));
+                assertFalse(a.isDone());
+                assertFalse(b.isDone());
+                assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_APPROVAL WHERE submission_id IN (?,?)",Integer.class,first,second));
+                return List.of(a,b);
+            });
+            assertNotNull(results);
+            assertEquals(List.of(200,409),List.of(results.get(0).get(15,TimeUnit.SECONDS),
+                    results.get(1).get(15,TimeUnit.SECONDS)).stream().sorted().toList());
+        }
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_APPROVAL WHERE submission_id IN (?,?)",Integer.class,first,second));
+    }
+
+    @Test
+    void simultaneousSameRequestReplaysOneReceipt() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String id = submit(member("ROLE_USER"),catalogDraft("同一承認"));
+        UUID key = UUID.randomUUID();
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var start = new CountDownLatch(1);
+            var a = pool.submit(() -> { await(start); return approve(admin,id,key,0,1); });
+            var b = pool.submit(() -> { await(start); return approve(admin,id,key,0,1); });
+            start.countDown();
+            var first = a.get(15,TimeUnit.SECONDS);
+            var second = b.get(15,TimeUnit.SECONDS);
+            assertEquals(200,first.statusCode(),string(first));
+            assertEquals(200,second.statusCode(),string(second));
+            assertEquals(node(first),node(second));
+        }
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_APPROVAL WHERE submission_id=?",Integer.class,id));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_EVENT WHERE submission_id=? AND next_status='APPROVED'",Integer.class,id));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"brewery","brand"})
+    void simultaneousRelationProposalsRequireTheLosingSubmissionToSelectTheExistingRelation(String relation) throws Exception {
+        var firstAdmin = member("ROLE_ADMIN");
+        var secondAdmin = member("ROLE_ADMIN");
+        String ja = "同じ関係"+UUID.randomUUID();
+        String ko = "같은 관계"+UUID.randomUUID();
+        var one = catalogDraft("一");
+        var two = catalogDraft("二");
+        one.put(relation,proposed(ja,ko));
+        two.put(relation,proposed("　"+ja+"　",ko));
+        String first = submit(member("ROLE_USER"),one);
+        String second = submit(member("ROLE_USER"),two);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var start = new CountDownLatch(1);
+            var a = pool.submit(() -> { await(start); return approve(firstAdmin,first,UUID.randomUUID(),0,1); });
+            var b = pool.submit(() -> { await(start); return approve(secondAdmin,second,UUID.randomUUID(),0,1); });
+            start.countDown();
+            var resultA = a.get(15,TimeUnit.SECONDS);
+            var resultB = b.get(15,TimeUnit.SECONDS);
+            assertEquals(List.of(200,409),List.of(resultA.statusCode(),resultB.statusCode()).stream().sorted().toList());
+            boolean aWon = resultA.statusCode()==200;
+            String column = relation.equals("brewery") ? "brewery_no" : "brand_no";
+            long sake = node(aWon ? resultA : resultB).path("sakeNo").longValue();
+            long existing = db.queryForObject("SELECT "+column+" FROM SAKE WHERE no=?",Long.class,sake);
+            var losingAdmin = aWon ? secondAdmin : firstAdmin;
+            String losingId = aWon ? second : first;
+            var corrected = aWon ? two : one;
+            corrected.put(relation,Map.of("existingNo",existing));
+            assertEquals(201,reviseAsAdmin(losingAdmin,losingId,0,corrected).statusCode());
+            assertEquals(200,approve(losingAdmin,losingId,UUID.randomUUID(),1,2).statusCode());
+            assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE "+column+"=?",Integer.class,existing));
+        }
+    }
+
+    @Test
+    void rollsBackNewRelationsProductProfileAndReceiptWhenFinalAuditFails() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        var data = catalogDraft("戻す酒");
+        String name = ((Map<?, ?>) data.get("sake")).get("ja").toString();
+        String brewery = name+"蔵";
+        String brand = name+"銘";
+        data.put("brewery",proposed(brewery,"합성 양조장 "+UUID.randomUUID()));
+        data.put("brand",proposed(brand,"합성 브랜드 "+UUID.randomUUID()));
+        String id = submit(member("ROLE_USER"),data);
+        UUID key = UUID.randomUUID();
+        db.execute("""
+                ALTER TABLE SUBMISSION_EVENT ADD CONSTRAINT fail_catalog_approval_audit
+                CHECK (submission_id <> '%s' OR next_status <> 'APPROVED')
+                """.formatted(id));
+        try {
+            assertEquals(500,approve(admin,id,key,0,1).statusCode());
+        } finally {
+            db.execute("ALTER TABLE SUBMISSION_EVENT DROP CHECK fail_catalog_approval_audit");
+        }
+        assertEquals("PENDING",db.queryForObject("SELECT status FROM CATALOG_SUBMISSION WHERE id=?",String.class,id));
+        assertEquals(0,countCatalogName(name));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM BREWERY WHERE name_ja=?",Integer.class,brewery));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM BRAND WHERE name_ja=?",Integer.class,brand));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_APPROVAL WHERE submission_id=?",Integer.class,id));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SAKE_SOURCE WHERE evidence_ref=?",Integer.class,"submission:"+id+"/revision:1"));
+        var retry = approve(admin,id,key,0,1);
+        assertEquals(200,retry.statusCode(),string(retry));
+        long sake = node(retry).path("sakeNo").longValue();
+        for (String relation : List.of("BREWERY","BRAND")) {
+            assertEquals(1,db.queryForObject("""
+                    SELECT COUNT(*) FROM %1$s_SOURCE x JOIN SAKE s ON s.%1$s_no=x.%1$s_no
+                    WHERE s.no=? AND x.source_system='USER_SUBMISSION' AND x.external_key IS NULL AND x.canonical_url IS NULL
+                    """.formatted(relation),Integer.class,sake));
+        }
+    }
+
+    private void assertRecommendationForApprovedSake(long sake) {
+        var condition = new com.sakezuki.backend.recommend.dto.SakeRecommendCondition();
+        assertEquals(40,recommendations.getSakeRecommendCandidates(condition).size());
+        condition.setSakeTypes(List.of());
+        assertEquals(40,recommendations.getSakeRecommendCandidates(condition).size());
+        condition.setSakeTypes(List.of("合成推薦型"));
+        condition.setAcidityMin(2.123);
+        condition.setAcidityMax(2.123);
+        var results = recommendations.getSakeRecommendCandidates(condition);
+        assertEquals(sake,results.getFirst().getNo());
+        assertEquals(db.queryForObject("SELECT name_ko FROM BREWERY WHERE no=1",String.class),
+                results.getFirst().getBreweryNameKo());
+        String food = UUID.randomUUID().toString();
+        db.update("INSERT INTO RECOMMEND_SAKE(food,sake_no,reason) VALUES(?,?,'fixture')",food,sake);
+        assertEquals(results.getFirst().getBreweryNameKo(),recommendations.getSakeRecommendList(food).getFirst().getBreweryNameKo());
+    }
+
+    private HttpResponse<byte[]> approve(Member admin,String id,UUID key,long version,int revision) throws Exception {
+        return post(admin,adminPath(id)+"/approvals",key,
+                Map.of("expectedVersion",version,"revisionNo",revision,"reason","검수 승인","identityConfirmed",true));
+    }
+
+    private static Map<String,Object> catalogDraft(String marker) {
+        var data = draft(null);
+        data.put("sake",Map.of("ja",marker+UUID.randomUUID(),"ko","합성 상품"));
+        return data;
+    }
+
+    private int countCatalogName(String name) {
+        return db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE name_ja=?",Integer.class,name);
     }
 
     private static void assertImageDenied(int code,HttpResponse<?> response) {

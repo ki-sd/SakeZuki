@@ -39,9 +39,9 @@
         s.alcohol_percentage AS alcoholPercentage,
         b.name_ko AS breweryNameKo,
         b.prefecture,
-        (
-        CASE
+        (0
         <if test="sakeTypes!=null and !sakeTypes.isEmpty()">
+            + CASE
             WHEN s.sake_type IN
             <foreach collection="sakeTypes"
                      item="type"
@@ -51,14 +51,10 @@
                 #{type}
             </foreach>
             THEN 3
+            ELSE 0 END
         </if>
-        ELSE 0
-        END
-
-        +
-
-        CASE
         <if test="sakeMeterMin!=null and sakeMeterMax!=null">
+            + CASE
             WHEN
             (
             srp.sake_meter_max IS NULL
@@ -75,14 +71,10 @@
             OR srp.sake_meter_max IS NOT NULL
             )
             THEN 2
+            ELSE 0 END
         </if>
-        ELSE 0
-        END
-
-        +
-
-        CASE
         <if test="acidityMin!=null and acidityMax!=null">
+            + CASE
             WHEN
             (
             srp.acidity_max IS NULL
@@ -99,14 +91,10 @@
             OR srp.acidity_max IS NOT NULL
             )
             THEN 2
+            ELSE 0 END
         </if>
-        ELSE 0
-        END
-
-        +
-
-        CASE
         <if test="polishingRatioMin!=null and polishingRatioMax!=null">
+            + CASE
             WHEN
             (
             srp.polishing_ratio_max IS NULL
@@ -123,9 +111,8 @@
             OR srp.polishing_ratio_max IS NOT NULL
             )
             THEN 1
+            ELSE 0 END
         </if>
-        ELSE 0
-        END
         ) AS score
 
         FROM SAKE s
@@ -133,11 +120,8 @@
         JOIN SAKE_RECOMMEND_PROFILE srp
         ON srp.sake_no=s.no
 
-        LEFT JOIN BRAND br
-        ON br.no=s.brand_no
-
-        LEFT JOIN BREWERY b
-        ON b.no=br.brewery_no
+        JOIN BREWERY b
+        ON b.no=s.brewery_no
 
         ORDER BY score DESC,s.no
 
@@ -162,10 +146,8 @@
         FROM RECOMMEND_SAKE rs
         JOIN SAKE s
             ON s.no=rs.sake_no
-        LEFT JOIN BRAND br
-            ON br.no=s.brand_no
-        LEFT JOIN BREWERY b
-            ON b.no=br.brewery_no
+        JOIN BREWERY b
+            ON b.no=s.brewery_no
         WHERE rs.food=#{food}
         ORDER BY rs.no
     </select>
