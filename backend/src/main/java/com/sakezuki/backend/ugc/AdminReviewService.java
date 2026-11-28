@@ -26,10 +26,11 @@ class AdminReviewService {
     private final AttachmentRepository stored;
     private final AttachmentService attachments;
     private final ObjectMapper json;
+    private final ImageApprovalJobs jobs;
 
     AdminReviewService(AdminReviewAccess access, AdminReviewRepository reviews, SubmissionRepository submissions,
                        SubmissionService validation, AttachmentRepository stored, AttachmentService attachments,
-                       ObjectMapper json) {
+                       ObjectMapper json, ImageApprovalJobs jobs) {
         this.access = access;
         this.reviews = reviews;
         this.submissions = submissions;
@@ -37,6 +38,7 @@ class AdminReviewService {
         this.stored = stored;
         this.attachments = attachments;
         this.json = json;
+        this.jobs = jobs;
     }
 
     enum Action {
@@ -160,6 +162,7 @@ class AdminReviewService {
         if (expected == null || expected < 0) throw SubmissionInput.invalid("expectedVersion");
         var head = reviews.find(id, true).orElseThrow(SubmissionErrors::missing);
         if (head.version() != expected || !"PENDING".equals(head.status())) throw SubmissionErrors.conflict();
+        jobs.requireInactive(head.id());
         return head;
     }
 

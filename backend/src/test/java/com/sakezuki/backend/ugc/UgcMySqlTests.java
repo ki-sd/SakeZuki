@@ -49,7 +49,9 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.security.oauth2.client.registration.google.client-id=test",
         "spring.security.oauth2.client.registration.google.client-secret=test",
         "jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        "ugc.open-submissions=2", "ugc.uploads-per-day=2"})
+        "ugc.open-submissions=2", "ugc.uploads-per-day=2",
+        "ugc.image-approval.enabled=true", "ugc.image-approval.poll-ms=3600000",
+        "spring.datasource.hikari.connection-init-sql=SET SESSION innodb_lock_wait_timeout = 4"})
 class UgcMySqlTests {
     private static final String ROOT = UgcController.ROOT;
     private static final String ADMIN = AdminReviewController.ROOT;
@@ -57,7 +59,12 @@ class UgcMySqlTests {
     @Autowired JdbcTemplate db;
     @Autowired ObjectMapper json;
     @Autowired JwtTokenProvider tokens;
-    @Autowired FakeStore staging;
+    @Autowired @org.springframework.beans.factory.annotation.Qualifier("uploadFixtureStore") FakeStore staging;
+    @Autowired @org.springframework.beans.factory.annotation.Qualifier("deliveryFixtureStore") FakeStore delivery;
+    @Autowired ImageApprovalJobs imageJobs;
+    @Autowired ImageApprovalWorker imageWorker;
+    @Autowired com.sakezuki.backend.image.ImagePublicationService publication;
+    @Autowired ImageApprovalService imageApprovals;
     @Autowired AttachmentRepository attachments;
     @Autowired SubmissionRepository submissions;
     @Autowired SubmissionLimits limits;
@@ -77,8 +84,11 @@ class UgcMySqlTests {
     @TestConfiguration(proxyBeanMethods = false)
     static class StorageFixture {
         @Bean FakeStore uploadFixtureStore() { return new FakeStore(); }
-        @Bean @Primary ImageStores uploadFixtureAreas(FakeStore storage) {
-            return area -> area == ImageStores.Area.STAGING ? Optional.of(storage) : Optional.empty();
+        @Bean FakeStore deliveryFixtureStore() { return new FakeStore(); }
+        @Bean @Primary ImageStores uploadFixtureAreas(
+                @org.springframework.beans.factory.annotation.Qualifier("uploadFixtureStore") FakeStore storage,
+                @org.springframework.beans.factory.annotation.Qualifier("deliveryFixtureStore") FakeStore delivery) {
+            return area -> Optional.of(area == ImageStores.Area.STAGING ? storage : delivery);
         }
     }
 
@@ -291,7 +301,14 @@ class UgcMySqlTests {
         assertEquals(422, upload(owner, UUID.randomUUID(), "image/png", new byte[]{1}).statusCode());
         assertEquals(0, db.queryForObject("SELECT reserved_bytes FROM SUBMISSION_ATTACHMENT WHERE owner_no=?",
                 Integer.class, owner.no()));
-        var another = new AttachmentService(attachments, submissions, limits, images, stores, manager);
+        // A different JVM admits independently, then its image storage becomes unavailable after the DB claim.
+        var otherImages = org.mockito.Mockito.mock(com.sakezuki.backend.image.ImageAssetService.class);
+        var otherPermit = org.mockito.Mockito.mock(com.sakezuki.backend.image.ImageAssetService.Processing.class);
+        org.mockito.Mockito.when(otherImages.admit()).thenReturn(otherPermit);
+        org.mockito.Mockito.doThrow(new IOException("fixture storage unavailable")).when(otherPermit)
+                .stage(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+        var another = new AttachmentService(attachments, submissions, limits, otherImages, stores, manager);
         var started = new CountDownLatch(1);
         var continueUpload = new CountDownLatch(1);
         staging.beforeWrite = () -> {
@@ -1408,6 +1425,425 @@ class UgcMySqlTests {
         return db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE name_ja=?",Integer.class,name);
     }
 
+    @org.junit.jupiter.api.AfterEach
+    void clearRunnableFixtureJobs() {
+        // Keep history, while isolating global queue polling from a failed test's pending work.
+        db.update("""
+                UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET state='CANCELLED',generation=generation+1,due_at=NULL,
+                    failure_code='TEST_TEARDOWN',cancelled_by=actor_no WHERE active_submission IS NOT NULL
+                """);
+    }
+
+    @Test
+    void imageApprovalIsPrivateUntilAtomicPublicationAndReplaysApproval() throws Exception {
+        var fixture = newImageApproval();
+        String approvalPath = adminPath(fixture.submission())+"/image-approvals";
+        assertEquals(401,post(null,approvalPath,fixture.key(),fixture.input()).statusCode());
+        assertEquals(403,post(fixture.owner(),approvalPath,fixture.key(),fixture.input()).statusCode());
+        for (var invalid : List.of("rights","attachmentId","revisionNo","expectedVersion")) {
+            var input = new LinkedHashMap<>(fixture.input());
+            input.remove(invalid);
+            assertEquals(422,post(fixture.admin(),approvalPath,fixture.key(),input).statusCode(),invalid);
+        }
+        var wrong = new LinkedHashMap<>(fixture.input());
+        wrong.put("attachmentId",uploadedAsset(member("ROLE_USER")));
+        assertEquals(409,post(fixture.admin(),approvalPath,fixture.key(),wrong).statusCode());
+        wrong.putAll(fixture.input());
+        wrong.put("revisionNo",2);
+        assertEquals(409,post(fixture.admin(),approvalPath,fixture.key(),wrong).statusCode());
+        wrong.putAll(fixture.input());
+        wrong.put("expectedVersion",1);
+        assertEquals(409,post(fixture.admin(),approvalPath,fixture.key(),wrong).statusCode());
+        wrong.putAll(fixture.input());
+        wrong.put("rights",Map.of("decision","GRANTED","scope","PUBLIC_WEB","evidence","합성",
+                "validFrom","2020-01-01T00:00:00Z","validUntil","2020-02-01T00:00:00Z"));
+        assertEquals(422,post(fixture.admin(),approvalPath,fixture.key(),wrong).statusCode());
+
+        var queued = enqueue(fixture);
+        long job = queued.path("id").longValue();
+        assertEquals("PENDING",queued.path("state").asString());
+        assertEquals(queued,enqueue(fixture));
+        assertEquals(409,post(fixture.admin(),approvalPath,UUID.randomUUID(),fixture.input()).statusCode());
+        wrong = new LinkedHashMap<>(fixture.input());
+        wrong.put("reason","다른 사유");
+        assertEquals(409,post(fixture.admin(),approvalPath,fixture.key(),wrong).statusCode());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM IMAGE_RIGHTS_EVENT WHERE asset_id=?",Integer.class,fixture.asset()));
+        assertEquals(0,countCatalogName(fixture.name()));
+        assertEquals(409,post(fixture.owner(),ROOT+"/"+fixture.submission()+"/cancel",null,Map.of("expectedVersion",0)).statusCode());
+        assertEquals(409,reviseAsAdmin(fixture.admin(),fixture.submission(),0,draft(null)).statusCode());
+        assertEquals(409,decideAsAdmin(fixture.admin(),fixture.submission(),UUID.randomUUID(),"REJECT",0,1).statusCode());
+        assertEquals(409,approve(fixture.admin(),fixture.submission(),UUID.randomUUID(),0,1).statusCode());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM PUBLIC_SAKE_IMAGE WHERE asset_id=?",Integer.class,fixture.asset()));
+
+        imageWorker.runOnce();
+        var result = jobView(fixture);
+        assertEquals(job,result.path("id").longValue());
+        assertEquals("COMPLETED",result.path("state").asString(),result.toString());
+        assertEquals(1,result.path("attempts").intValue());
+        long sake = result.path("approval").path("sakeNo").longValue();
+        assertTrue(sake>0);
+        assertEquals(result,enqueue(fixture));
+        String publicPath = "/api/images/sakes/"+sake+"/"+fixture.asset();
+        var served = get(null,publicPath);
+        assertEquals(200,served.statusCode());
+        assertTrue(served.headers().firstValue("Cache-Control").orElse("").contains("no-store"));
+        assertEquals("nosniff",served.headers().firstValue("X-Content-Type-Options").orElseThrow());
+        String objectKey = db.queryForObject("SELECT object_key FROM IMAGE_OBJECT WHERE asset_id=? AND storage_area='DELIVERY'",
+                String.class,fixture.asset());
+        assertArrayEquals(staging.objects.get(objectKey).bytes(),served.body());
+        assertEquals(1,delivery.writes.get(objectKey));
+        assertEquals(publicPath,node(get(null,"/api/sake/"+sake)).path("imageUrl").asString());
+        publication.recordRights(UUID.fromString(fixture.asset()),
+                com.sakezuki.backend.image.ImagePublicationService.Decision.REVOKED,"합성 철회","fixture",null,null);
+        assertEquals(404,get(null,publicPath).statusCode());
+        assertTrue(node(get(null,"/api/sake/"+sake)).path("imageUrl").isNull());
+        db.update("DELETE FROM MEMBER_AUTHORITY WHERE member_no=?",fixture.admin().no());
+        assertEquals(403,post(fixture.admin(),approvalPath,fixture.key(),fixture.input()).statusCode());
+    }
+
+    @Test
+    void lostDeliveryPutResponseReusesTheSameBytesAndObjectOnRetry() throws Exception {
+        var fixture = newImageApproval();
+        long job = enqueue(fixture).path("id").longValue();
+        delivery.afterWrite = () -> { throw new IOException("synthetic lost response"); };
+        try {
+            imageWorker.runOnce();
+        } finally {
+            delivery.afterWrite = () -> {};
+        }
+        var failed = jobView(fixture);
+        assertEquals("RETRYABLE_FAILURE",failed.path("state").asString(),failed.toString());
+        assertEquals("DELIVERY_PUT_IO",failed.path("failureCode").asString());
+        assertEquals(0,countCatalogName(fixture.name()));
+        imageWorker.runOnce();
+        assertEquals(1,jobView(fixture).path("attempts").intValue());
+        assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+job+"/retry",null,Map.of()).statusCode());
+        imageWorker.runOnce();
+        var complete = jobView(fixture);
+        assertEquals("COMPLETED",complete.path("state").asString(),complete.toString());
+        assertEquals(failed.path("deliveryObjectId"),complete.path("deliveryObjectId"));
+        assertEquals(2,complete.path("attempts").intValue());
+        String objectKey = db.queryForObject("SELECT object_key FROM IMAGE_OBJECT WHERE id=?",
+                String.class,complete.path("deliveryObjectId").longValue());
+        assertEquals(1,delivery.writes.get(objectKey));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"RIGHTS","ADMIN","CANCEL"})
+    void changesWhileStorageIsInFlightCannotPublish(String change) throws Exception {
+        var fixture = newImageApproval();
+        long job = enqueue(fixture).path("id").longValue();
+        var entered = new CountDownLatch(1);
+        var resume = new CountDownLatch(1);
+        delivery.beforeWrite = () -> { entered.countDown(); await(resume); };
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var pending = pool.submit(imageWorker::runOnce);
+            try {
+                assertTrue(entered.await(10,TimeUnit.SECONDS));
+                assertEquals(0,countCatalogName(fixture.name()));
+                if ("RIGHTS".equals(change)) {
+                    publication.recordRights(UUID.fromString(fixture.asset()),
+                            com.sakezuki.backend.image.ImagePublicationService.Decision.REVOKED,"합성 철회","fixture",null,null);
+                } else if ("ADMIN".equals(change)) {
+                    db.update("DELETE FROM MEMBER_AUTHORITY WHERE member_no=?",fixture.admin().no());
+                } else {
+                    assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+job+"/cancel",null,Map.of()).statusCode());
+                    assertEquals(200,post(fixture.owner(),ROOT+"/"+fixture.submission()+"/cancel",null,
+                            Map.of("expectedVersion",0)).statusCode());
+                }
+            } finally {
+                resume.countDown();
+            }
+            pending.get(10,TimeUnit.SECONDS);
+        } finally {
+            delivery.beforeWrite = () -> {};
+        }
+        var result = jobView(fixture,member("ROLE_ADMIN"));
+        assertEquals("CANCEL".equals(change) ? "CANCELLED" : "REQUIRES_REVIEW",result.path("state").asString(),result.toString());
+        assertEquals(0,countCatalogName(fixture.name()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_APPROVAL WHERE submission_id=?",Integer.class,fixture.submission()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM PUBLIC_SAKE_IMAGE WHERE asset_id=?",Integer.class,fixture.asset()));
+    }
+
+    @Test
+    void expiredWorkerCannotAdvanceAReplacementObjectsGeneration() throws Exception {
+        var fixture = newImageApproval();
+        long id = enqueue(fixture).path("id").longValue();
+        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        ImageApprovalJobs.Job first;
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var start = new CountDownLatch(1);
+            var one = pool.submit(() -> { await(start); return tx.execute(status -> imageJobs.claim()); });
+            var two = pool.submit(() -> { await(start); return tx.execute(status -> imageJobs.claim()); });
+            start.countDown();
+            var claims = List.of(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS));
+            assertEquals(1,claims.stream().filter(Optional::isPresent).count());
+            first = claims.stream().flatMap(Optional::stream).findFirst().orElseThrow();
+        }
+        assertEquals(id,first.id());
+        db.update("UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET due_at=UTC_TIMESTAMP(6)-INTERVAL 1 SECOND WHERE id=?",id);
+        var second = tx.execute(status -> imageJobs.claim()).orElseThrow();
+        assertEquals(first.generation()+1,second.generation());
+        try (var permit = images.admit()) {
+            assertThrows(ImageApprovalJobs.Superseded.class,() -> permit.promote(first.asset(),imageApprovals.promotion(first)));
+            imageJobs.fail(first,"LATE_FAILURE",false);
+            assertEquals("PROCESSING",jobView(fixture).path("state").asString());
+            var prepared = permit.promote(second.asset(),imageApprovals.promotion(second));
+            assertThrows(ImageApprovalJobs.Superseded.class,() -> imageApprovals.complete(first,prepared));
+            imageApprovals.complete(second,prepared);
+        }
+        assertEquals("COMPLETED",jobView(fixture).path("state").asString());
+        assertEquals(2,jobView(fixture).path("attempts").intValue());
+    }
+
+    @Test
+    void sharedAdmissionDoesNotReserveUploadQuotaOrWorkerAttempts() throws Exception {
+        var fixture = newImageApproval();
+        enqueue(fixture);
+        try (var permit = images.admit()) {
+            imageWorker.runOnce();
+            assertEquals(0,jobView(fixture).path("attempts").intValue());
+        }
+
+        var entered = new CountDownLatch(1);
+        var resume = new CountDownLatch(1);
+        delivery.beforeWrite = () -> { entered.countDown(); await(resume); };
+        var other = member("ROLE_USER");
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var running = pool.submit(imageWorker::runOnce);
+            try {
+                assertTrue(entered.await(10,TimeUnit.SECONDS));
+                for (var owner : List.of(fixture.owner(),other)) {
+                    long rows = db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT WHERE owner_no=?",Long.class,owner.no());
+                    long bytes = db.queryForObject("SELECT COALESCE(SUM(reserved_bytes),0) FROM SUBMISSION_ATTACHMENT WHERE owner_no=?",
+                            Long.class,owner.no());
+                    assertEquals(503,upload(owner,UUID.randomUUID(),"image/jpeg",image("jpeg")).statusCode());
+                    assertEquals(rows,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT WHERE owner_no=?",Long.class,owner.no()));
+                    assertEquals(bytes,db.queryForObject("SELECT COALESCE(SUM(reserved_bytes),0) FROM SUBMISSION_ATTACHMENT WHERE owner_no=?",
+                            Long.class,owner.no()));
+                }
+            } finally {
+                resume.countDown();
+            }
+            running.get(10,TimeUnit.SECONDS);
+        } finally {
+            delivery.beforeWrite = () -> {};
+        }
+        assertEquals("COMPLETED",jobView(fixture).path("state").asString());
+        assertEquals(201,upload(other,UUID.randomUUID(),"image/jpeg",image("jpeg")).statusCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"SAKE_IMAGE","SUBMISSION_APPROVAL","SUBMISSION_EVENT","SUBMISSION_IMAGE_APPROVAL_JOB"})
+    void finalPublicationFailureRollsBackCatalogAndOnlyLeavesPrivateDelivery(String table) throws Exception {
+        var fixture = newImageApproval();
+        enqueue(fixture);
+        String constraint = switch (table) {
+            case "SAKE_IMAGE" -> "asset_id <> '"+fixture.asset()+"'";
+            case "SUBMISSION_APPROVAL" -> "submission_id <> '"+fixture.submission()+"'";
+            case "SUBMISSION_EVENT" -> "submission_id <> '"+fixture.submission()+"' OR next_status <> 'APPROVED'";
+            default -> "submission_id <> '"+fixture.submission()+"' OR state <> 'COMPLETED'";
+        };
+        db.execute("ALTER TABLE "+table+" ADD CONSTRAINT fixture_image_approval_failure CHECK ("+constraint+")");
+        try {
+            imageWorker.runOnce();
+        } finally {
+            db.execute("ALTER TABLE "+table+" DROP CHECK fixture_image_approval_failure");
+        }
+        var failed = jobView(fixture);
+        assertEquals("REQUIRES_REVIEW",failed.path("state").asString(),failed.toString());
+        assertEquals(0,countCatalogName(fixture.name()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SAKE_IMAGE WHERE asset_id=?",Integer.class,fixture.asset()));
+        assertEquals("VERIFIED",db.queryForObject("SELECT storage_state FROM IMAGE_OBJECT WHERE id=?",String.class,
+                failed.path("deliveryObjectId").longValue()));
+        assertEquals("PENDING",db.queryForObject("SELECT status FROM CATALOG_SUBMISSION WHERE id=?",String.class,fixture.submission()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_APPROVAL WHERE submission_id=?",Integer.class,fixture.submission()));
+        var replacement = post(fixture.admin(),adminPath(fixture.submission())+"/image-approvals",UUID.randomUUID(),fixture.input());
+        assertEquals(202,replacement.statusCode(),string(replacement));
+        imageWorker.runOnce();
+        var reused = jobView(fixture);
+        assertEquals("COMPLETED",reused.path("state").asString(),reused.toString());
+        assertEquals(failed.path("deliveryObjectId"),reused.path("deliveryObjectId"));
+    }
+
+    @Test
+    void realV9LockTimeoutPreservesVerifiedCopyAndRetriesTheSameJob() throws Exception {
+        var fixture = newImageApproval();
+        long id = enqueue(fixture).path("id").longValue();
+        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            tx.executeWithoutResult(status -> {
+                db.queryForObject("SELECT id FROM GUIDE_CATALOG_WRITE_MUTEX WHERE id=1 FOR UPDATE",Integer.class);
+                var worker = pool.submit(imageWorker::runOnce);
+                try {
+                    worker.get(12,TimeUnit.SECONDS);
+                } catch (Exception failure) {
+                    throw new AssertionError(failure);
+                }
+            });
+        }
+        var parked = jobView(fixture);
+        assertEquals("RETRYABLE_FAILURE",parked.path("state").asString(),parked.toString());
+        assertEquals("DB_LOCK_CONTENTION",parked.path("failureCode").asString());
+        assertEquals("VERIFIED",db.queryForObject("SELECT storage_state FROM IMAGE_OBJECT WHERE id=?",String.class,
+                parked.path("deliveryObjectId").longValue()));
+        assertEquals(0,countCatalogName(fixture.name()));
+        assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+id+"/retry",null,Map.of()).statusCode());
+        imageWorker.runOnce();
+        assertEquals("COMPLETED",jobView(fixture).path("state").asString());
+    }
+
+    @Test
+    void lateStagingReadCannotCreateDeliveryIntentAfterNewWorkerClaims() throws Exception {
+        var fixture = newImageApproval();
+        long id = enqueue(fixture).path("id").longValue();
+        var entered = new CountDownLatch(1);
+        var resume = new CountDownLatch(1);
+        staging.afterRead = () -> { entered.countDown(); await(resume); };
+        ImageApprovalJobs.Job replacement;
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var old = pool.submit(imageWorker::runOnce);
+            try {
+                assertTrue(entered.await(10,TimeUnit.SECONDS));
+                db.update("UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET due_at=UTC_TIMESTAMP(6)-INTERVAL 1 SECOND WHERE id=?",id);
+                var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+                replacement = tx.execute(status -> imageJobs.claim()).orElseThrow();
+            } finally {
+                resume.countDown();
+            }
+            old.get(10,TimeUnit.SECONDS);
+        } finally {
+            staging.afterRead = () -> {};
+        }
+        assertEquals(2,replacement.generation());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM IMAGE_OBJECT WHERE asset_id=? AND storage_area='DELIVERY'",
+                Integer.class,fixture.asset()));
+        try (var permit = images.admit()) {
+            var prepared = permit.promote(replacement.asset(),imageApprovals.promotion(replacement));
+            assertEquals(0,countCatalogName(fixture.name()));
+            assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM PUBLIC_SAKE_IMAGE WHERE asset_id=?",Integer.class,fixture.asset()));
+            imageApprovals.complete(replacement,prepared);
+        }
+        assertEquals("COMPLETED",jobView(fixture).path("state").asString());
+    }
+
+    @Test
+    void jobRegistrationRollsBackGrantAndDatabaseRejectsInvalidActiveRows() throws Exception {
+        var fixture = newImageApproval();
+        db.execute("ALTER TABLE SUBMISSION_IMAGE_APPROVAL_JOB ADD CONSTRAINT fixture_image_registration_failure CHECK "
+                +"(submission_id <> '"+fixture.submission()+"')");
+        try {
+            assertEquals(500,post(fixture.admin(),adminPath(fixture.submission())+"/image-approvals",fixture.key(),fixture.input()).statusCode());
+        } finally {
+            db.execute("ALTER TABLE SUBMISSION_IMAGE_APPROVAL_JOB DROP CHECK fixture_image_registration_failure");
+        }
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM IMAGE_RIGHTS_EVENT WHERE asset_id=?",Integer.class,fixture.asset()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_IMAGE_APPROVAL_JOB WHERE submission_id=?",
+                Integer.class,fixture.submission()));
+        long first = enqueue(fixture).path("id").longValue();
+        var invalid = assertThrows(org.springframework.dao.DataAccessException.class,() -> db.update(
+                "UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET due_at=NULL WHERE id=?",first));
+        assertEquals(3819,((java.sql.SQLException)invalid.getMostSpecificCause()).getErrorCode());
+        assertThrows(DataIntegrityViolationException.class,() -> db.update(
+                "UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET revision_no=99 WHERE id=?",first));
+        assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+first+"/cancel",null,Map.of()).statusCode());
+        assertEquals(202,post(fixture.admin(),adminPath(fixture.submission())+"/image-approvals",UUID.randomUUID(),fixture.input()).statusCode());
+        assertThrows(DataIntegrityViolationException.class,() -> db.update("""
+                UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET state='PENDING',due_at=UTC_TIMESTAMP(6),
+                  failure_code=NULL,cancelled_by=NULL WHERE id=?
+                """,first));
+        imageWorker.runOnce();
+        assertEquals("COMPLETED",jobView(fixture).path("state").asString());
+        var history = get(fixture.admin(),jobPath(fixture)+"/"+first);
+        assertEquals(200,history.statusCode());
+        assertEquals("CANCELLED",node(history).path("state").asString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"STAGING_MISSING","STAGING_DAMAGED","DELIVERY_DAMAGED"})
+    void permanentMediaFailureNeedsReviewAndNeverOverwrites(String reason) throws Exception {
+        var fixture = newImageApproval();
+        enqueue(fixture);
+        String key = db.queryForObject("SELECT object_key FROM IMAGE_OBJECT WHERE asset_id=? AND storage_area='STAGING'",
+                String.class,fixture.asset());
+        var original = staging.objects.get(key);
+        byte[] changed = original.bytes().clone();
+        changed[0] ^= 1;
+        var corrupt = new ImageStorage.Payload(original.contentType(),original.cacheControl(),original.declaredSha256(),changed);
+        switch (reason) {
+            case "STAGING_MISSING" -> staging.objects.remove(key);
+            case "STAGING_DAMAGED" -> staging.objects.put(key,corrupt);
+            default -> delivery.objects.put(key,corrupt);
+        }
+        int writes = delivery.writeRequests.get();
+        imageWorker.runOnce();
+        var review = jobView(fixture);
+        assertEquals("REQUIRES_REVIEW",review.path("state").asString(),review.toString());
+        assertEquals(reason,review.path("failureCode").asString());
+        assertEquals(writes,delivery.writeRequests.get());
+        assertEquals(0,countCatalogName(fixture.name()));
+    }
+
+    @Test
+    void automaticRetryBudgetReleasesSubmissionAfterFourStorageFailures() throws Exception {
+        var fixture = newImageApproval();
+        long id = enqueue(fixture).path("id").longValue();
+        delivery.writesFail = true;
+        try {
+            for (int attempt=1; attempt<=4; attempt++) {
+                imageWorker.runOnce();
+                var result = jobView(fixture);
+                assertEquals(attempt,result.path("attempts").intValue());
+                if (attempt<4) {
+                    assertEquals("RETRYABLE_FAILURE",result.path("state").asString());
+                    assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+id+"/retry",null,Map.of()).statusCode());
+                } else {
+                    assertEquals("REQUIRES_REVIEW",result.path("state").asString());
+                    assertEquals(409,post(fixture.admin(),jobPath(fixture)+"/"+id+"/retry",null,Map.of()).statusCode());
+                }
+            }
+        } finally {
+            delivery.writesFail = false;
+        }
+        assertEquals(200,post(fixture.owner(),ROOT+"/"+fixture.submission()+"/cancel",null,Map.of("expectedVersion",0)).statusCode());
+    }
+
+    private record ImageApprovalFixture(Member owner,Member admin,String name,String submission,String asset,UUID key,
+                                        Map<String,Object> input) {}
+
+    private ImageApprovalFixture newImageApproval() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String asset = uploadedAsset(owner);
+        var data = catalogDraft("公開画像");
+        String name = ((Map<?,?>)data.get("sake")).get("ja").toString();
+        data.putAll(Map.of("attachmentId",asset,"imageRights","합성 이미지 사용 설명","imageConsent",true));
+        String id = submit(owner,data);
+        var input = Map.<String,Object>of("expectedVersion",0,"revisionNo",1,"reason","합성 제보 승인","identityConfirmed",true,
+                "attachmentId",asset,"rights",Map.of("decision","GRANTED","scope","PUBLIC_WEB","evidence","합성 자료의 공개 근거",
+                        "validFrom","2020-01-01T00:00:00Z"));
+        return new ImageApprovalFixture(owner,admin,name,id,asset,UUID.randomUUID(),input);
+    }
+
+    private JsonNode enqueue(ImageApprovalFixture fixture) throws Exception {
+        var response = post(fixture.admin(),adminPath(fixture.submission())+"/image-approvals",fixture.key(),fixture.input());
+        assertEquals(202,response.statusCode(),string(response));
+        assertEquals(jobPath(fixture),response.headers().firstValue("Location").orElseThrow());
+        return node(response);
+    }
+
+    private JsonNode jobView(ImageApprovalFixture fixture) throws Exception {
+        return jobView(fixture,fixture.admin());
+    }
+
+    private JsonNode jobView(ImageApprovalFixture fixture, Member observer) throws Exception {
+        var response = get(observer,jobPath(fixture));
+        assertEquals(200,response.statusCode(),string(response));
+        return node(response);
+    }
+
+    private static String jobPath(ImageApprovalFixture fixture) { return adminPath(fixture.submission())+"/approval-job"; }
+
     private static void assertImageDenied(int code,HttpResponse<?> response) {
         assertEquals(code,response.statusCode());
         assertFalse(response.headers().firstValue("Content-Type").orElse("").startsWith("image/"));
@@ -1559,6 +1995,7 @@ class UgcMySqlTests {
         final AtomicInteger writeRequests = new AtomicInteger();
         volatile boolean writesFail;
         volatile Probe beforeWrite = () -> {};
+        volatile Probe afterWrite = () -> {};
         volatile Probe afterRead = () -> {};
 
         @Override public boolean createIfAbsent(ObjectKey key, String mime, String hash, byte[] bytes) throws IOException {
@@ -1568,6 +2005,7 @@ class UgcMySqlTests {
             if (writesFail) throw new IOException("fixture unavailable");
             boolean added = objects.putIfAbsent(key.value(), new Payload(mime, CACHE_CONTROL, hash, bytes.clone())) == null;
             if (added) writes.merge(key.value(), 1, Integer::sum);
+            afterWrite.run();
             return added;
         }
 

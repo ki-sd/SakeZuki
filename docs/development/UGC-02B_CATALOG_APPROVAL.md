@@ -37,3 +37,7 @@ V13은 InnoDB DDL 여러 개를 포함한다. 적용 중 실패하면 Flyway 이
 ## 검증 명령과 증거
 
 기준 main은 `aca186edd146dae725ad68f34a757a00a5b714b9`다. V1–V12는 기준 main과 바이트 단위로 동일하다. `python3 scripts/test_auth_integration.py --e2e`의 격리 MySQL 단계에서 Backend 기본 28건, Backend MySQL 87건, Tools MySQL 17건을 통과했다. 기존 78건의 Backend MySQL 검증에 V13 설치·업그레이드 1건 및 승인 HTTP 8건이 추가됐다. 승인 검증에는 역할 철회 후 재생 차단, 현재 리비전·버전 및 데이터 고정, 이미지 이력, 신규·기존 이름 충돌, V9 대기, 관리자 두 명의 관계·상품 경쟁, 같은 키 재생, 감사 저장 실패의 전체 롤백 및 같은 키 복구가 포함됐다. 추천 SQL은 실제 MyBatis/MySQL에서 빈 조건과 일부 조건, 브랜드 없는 승인 상품 및 저장 추천을 검증했다. 다음 독립 QA에서는 기존 카탈로그의 중복 판정, V9 쓰기 경쟁, 권한 철회와 승인 간 순서, 장애 후 영수증 재생을 집중 확인한다.
+
+## 최종 독립 QA 및 병합
+
+사용자 제공 Antigravity 최종 판정은 `0a67b3ac913b18dbe279571fc25712bfeb5b127f`에서 **PASS**였다. 공식 JVM 212/212, 독립 프로브 127/127, 추가 실측 6건, P0/P1/P2 0건, 비차단 P3 6건이다. V13과 데이터 보존, 실제 1205 및 같은 키 복구, 9단계 장애 주입 롤백, 미커밋 공개 검색·추천 격리, V9 직렬화, 권한 철회 경쟁 및 멱등성이 포함됐다. Frontend 16·Chromium 11 및 Linux Docker HTTP/HTTPS는 독립 QA 직접 실행과 구분해 원격 CI로 확인했다. GitHub PR API 및 원격 main의 병합 SHA는 `59b6fc239b7531f7050c620312f3370ae59b33f1`이다. 운영 활성화 조건은 유지된다. [PR #18](https://github.com/ki-sd/SakeZuki/pull/18) · [원격 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46138735300)

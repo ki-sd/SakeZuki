@@ -160,6 +160,20 @@ class CatalogMigrationTests {
         assertCompleteBackfill();
     }
 
+    @Test
+    void v13UpgradeAddsWorkerLedgerWithoutChangingCatalogOrHistory() {
+        assertEquals(13,flyway("13").migrate().migrationsExecuted);
+        var preserved = List.of("SAKE","BREWERY","BRAND","SAKE_SOURCE","SAKE_RECOMMEND_PROFILE",
+                "CATALOG_SUBMISSION","SUBMISSION_REVISION","SUBMISSION_ATTACHMENT","SUBMISSION_APPROVAL",
+                "IMAGE_RIGHTS_EVENT","IMAGE_OBJECT");
+        var before = preserved.stream().collect(Collectors.toMap(table -> table,
+                table -> db.queryForList("SELECT * FROM "+table+" ORDER BY 1")));
+        assertEquals(1,flyway("14").migrate().migrationsExecuted);
+        before.forEach((table,rows) -> assertEquals(rows,db.queryForList("SELECT * FROM "+table+" ORDER BY 1"),table));
+        assertCompleteBackfill();
+        assertEquals(0,count("SUBMISSION_IMAGE_APPROVAL_JOB"));
+    }
+
     private void assertCompleteBackfill() {
         assertEquals(10_337, count("SAKE"));
         for (String table : CATALOG) {

@@ -94,11 +94,13 @@ class AdminReviewRepository {
 
     Revision current(Head head) {
         return sql.sql("""
-                SELECT r.*, NULL AS attachment_status, NULL AS storage_state,
+                SELECT r.*, a.status AS attachment_status, NULL AS storage_state,
                        NULL AS rights_state, FALSE AS previewable
                 FROM SUBMISSION_REVISION r
+                LEFT JOIN SUBMISSION_ATTACHMENT a ON a.id=r.attachment_id AND a.submission_id=r.submission_id
+                    AND a.owner_no=? AND a.asset_id=a.id
                 WHERE r.submission_id=? AND r.revision_no=?
-                """).params(head.id(), head.revision()).query(AdminReviewRepository::revision).single();
+                """).params(head.owner(),head.id(),head.revision()).query(AdminReviewRepository::revision).single();
     }
 
     List<Revision> revisions(Head head) {

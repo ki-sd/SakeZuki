@@ -19,7 +19,7 @@ class CatalogRegistration {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public long publish(SubmissionInput data, String evidence) {
-        sql.sql("SELECT id FROM GUIDE_CATALOG_WRITE_MUTEX WHERE id=1 FOR UPDATE").query(Integer.class).single();
+        lockWrites();
         validation.validateReferences(data);
         long brewery = data.brewery().existingNo() != null ? data.brewery().existingNo()
                 : createRelation(Entity.BREWERY, null, data.brewery().proposed(), evidence);
@@ -51,6 +51,10 @@ class CatalogRegistration {
         bindRange(profile, "polishing", data.polishingPercent());
         profile.update();
         return sake;
+    }
+
+    void lockWrites() {
+        sql.sql("SELECT id FROM GUIDE_CATALOG_WRITE_MUTEX WHERE id=1 FOR UPDATE").query(Integer.class).single();
     }
 
     private long createRelation(Entity entity, Long brewery, SubmissionInput.Names names, String evidence) {

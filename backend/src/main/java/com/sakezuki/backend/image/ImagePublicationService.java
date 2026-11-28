@@ -20,7 +20,7 @@ public class ImagePublicationService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public void recordRights(UUID asset, Decision decision, String evidence, String actor, Instant from, Instant until) {
+    public long recordRights(UUID asset, Decision decision, String evidence, String actor, Instant from, Instant until) {
         ImageAssetService.requireRef(evidence, 500);
         ImageAssetService.requireRef(actor, 200);
         Objects.requireNonNull(decision);
@@ -29,7 +29,27 @@ public class ImagePublicationService {
             throw new IllegalArgumentException("invalid image rights validity");
         }
         assets.lockAsset(asset);
-        assets.recordRights(asset, decision, evidence, actor, from, until);
+        return assets.recordRights(asset, decision, evidence, actor, from, until);
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public ImageAssetService.ObjectVersion lockVerifiedSubmissionStaging(UUID asset) {
+        var image = assets.lockAsset(asset);
+        var source = assets.object(asset, ImageStores.Area.STAGING);
+        if (!"USER_SUBMISSION".equals(image.source()) || !assets.verifiedStaging(asset,source.id(),source.attempt())) {
+            throw new ImageAssetService.PromotionRejected("STAGING_NOT_READY");
+        }
+        return new ImageAssetService.ObjectVersion(source.id(),source.attempt());
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void publishPrimary(long sakeNo, UUID asset, long grant, ImageAssetService.ObjectVersion delivery) {
+        assets.lockAsset(asset);
+        var object = assets.object(asset,ImageStores.Area.DELIVERY);
+        if (object.id()!=delivery.id() || object.attempt()!=delivery.attempt() || !assets.hasGrant(asset,grant)) {
+            throw new ImageAssetService.PromotionRejected("PUBLICATION_PRECONDITION_CHANGED");
+        }
+        assets.attachPrimary(sakeNo, asset, delivery.id(), grant);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)

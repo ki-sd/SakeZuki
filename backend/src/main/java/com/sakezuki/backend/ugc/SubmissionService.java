@@ -18,13 +18,15 @@ class SubmissionService {
     private final AttachmentRepository attachments;
     private final SubmissionLimits limits;
     private final ObjectMapper json;
+    private final ImageApprovalJobs jobs;
 
     SubmissionService(SubmissionRepository submissions, AttachmentRepository attachments, SubmissionLimits limits,
-                      ObjectMapper json) {
+                      ObjectMapper json, ImageApprovalJobs jobs) {
         this.submissions = submissions;
         this.attachments = attachments;
         this.limits = limits;
         this.json = json;
+        this.jobs = jobs;
     }
 
     record Receipt(String id, String status, long version, int currentRevision) {}
@@ -131,6 +133,7 @@ class SubmissionService {
         if (expected == null || expected < 0) throw SubmissionInput.invalid("expectedVersion");
         var prior = submissions.find(owner, id, true).orElseThrow(SubmissionErrors::missing);
         if (prior.version() != expected) throw SubmissionErrors.conflict();
+        jobs.requireInactive(prior.id());
         return prior;
     }
 
