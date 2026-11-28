@@ -34,7 +34,7 @@ CREATE TABLE SUBMISSION_IMAGE_APPROVAL_JOB (
         (CASE WHEN state IN ('PENDING','PROCESSING','RETRYABLE_FAILURE') THEN submission_id ELSE NULL END) STORED,
     UNIQUE (active_submission),
     UNIQUE (actor_no, request_key),
-    INDEX idx_image_approval_poll (state, due_at, id),
+    INDEX idx_image_approval_poll (due_at, id),
     INDEX idx_image_approval_submission (submission_id, id),
     FOREIGN KEY (submission_id, revision_no, attachment_id)
         REFERENCES SUBMISSION_REVISION(submission_id, revision_no, attachment_id),

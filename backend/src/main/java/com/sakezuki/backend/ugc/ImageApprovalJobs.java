@@ -59,7 +59,7 @@ class ImageApprovalJobs {
 
     Optional<Job> claim() {
         var next = sql.sql(ROW + """
-                WHERE state IN ('PENDING','RETRYABLE_FAILURE','PROCESSING') AND due_at<=UTC_TIMESTAMP(6)
+                WHERE due_at<=UTC_TIMESTAMP(6)
                 ORDER BY due_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
                 """).query(ImageApprovalJobs::row).optional();
         if (next.isEmpty()) return Optional.empty();
