@@ -52,7 +52,7 @@ class UgcController {
     }
 
     @GetMapping(ROOT)
-    SubmissionService.Page<SubmissionService.Summary> list(@AuthenticationPrincipal Jwt jwt,
+    SubmissionService.Page<SubmissionRepository.Summary> list(@AuthenticationPrincipal Jwt jwt,
                           @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return submissions.list(owner(jwt), page, size);
     }

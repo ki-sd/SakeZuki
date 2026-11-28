@@ -36,6 +36,14 @@ class AttachmentRepository {
                 """).params(owner, key.toString()).query(AttachmentRepository::intent).optional();
     }
 
+    Optional<Intent> ready(long owner, UUID key) {
+        return sql.sql("""
+                SELECT a.*, FALSE AS leased, expires_at <= UTC_TIMESTAMP(6) AS expired
+                FROM SUBMISSION_ATTACHMENT a JOIN MEMBER m ON m.no=a.owner_no AND m.status='ACTIVE'
+                WHERE a.owner_no=? AND a.request_key=? AND a.status='READY'
+                """).params(owner,key.toString()).query(AttachmentRepository::intent).optional();
+    }
+
     boolean hasLiveCopy(long owner, String hash) {
         return sql.sql("""
                 SELECT id FROM SUBMISSION_ATTACHMENT WHERE owner_no=? AND request_hash=?
