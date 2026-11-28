@@ -132,6 +132,34 @@ class CatalogMigrationTests {
         assertEquals(0, count("SUBMISSION_REVIEW_DECISION"));
     }
 
+    @Test
+    void freshDatabaseAndV12UpgradePreserveCatalogAndProfiles() {
+        assertEquals(13, flyway("13").migrate().migrationsExecuted);
+        assertCompleteBackfill();
+        assertEquals(0, count("SUBMISSION_APPROVAL"));
+        flyway("13").clean();
+        assertEquals(12, flyway("12").migrate().migrationsExecuted);
+        var sake = db.queryForList("SELECT no,source_id,brewery_no,brand_no,name_ja FROM SAKE ORDER BY no");
+        String profiles = """
+                SELECT sake_no, CAST(sake_meter_min AS DECIMAL(8,3)) AS meterMin,
+                       CAST(sake_meter_max AS DECIMAL(8,3)) AS meterMax,
+                       CAST(acidity_min AS DECIMAL(7,3)) AS acidityMin,
+                       CAST(acidity_max AS DECIMAL(7,3)) AS acidityMax,
+                       CAST(polishing_ratio_min AS DECIMAL(7,3)) AS polishingMin,
+                       CAST(polishing_ratio_max AS DECIMAL(7,3)) AS polishingMax
+                FROM SAKE_RECOMMEND_PROFILE ORDER BY sake_no
+                """;
+        var before = db.queryForList(profiles);
+        assertEquals(1, flyway("13").migrate().migrationsExecuted);
+        assertEquals(sake, db.queryForList("SELECT no,source_id,brewery_no,brand_no,name_ja FROM SAKE ORDER BY no"));
+        assertEquals(before, db.queryForList(profiles));
+        assertEquals(0, count("SUBMISSION_APPROVAL"));
+        assertEquals(0, db.queryForObject("""
+                SELECT COUNT(*) FROM SAKE WHERE approval_name_key IS NOT NULL OR capacity_ml IS NOT NULL OR variant IS NOT NULL
+                """, Integer.class));
+        assertCompleteBackfill();
+    }
+
     private void assertCompleteBackfill() {
         assertEquals(10_337, count("SAKE"));
         for (String table : CATALOG) {

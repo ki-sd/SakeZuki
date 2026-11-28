@@ -14,8 +14,8 @@
 | IMG-03B-3 / P1 | 이미지 자산 메타데이터·Backend 이미지 제공 · DONE | V10 자산·권리, 검증 저장 및 공개 제공 | [이미지 자산](IMG-03B-3_IMAGE_ASSETS.md) · 미적용 |
 | IMG-03C / P1 | 마이그레이션 실행기·멱등성·실패 복구·롤백 · PLANNED | IMG-03B-3 공통 이미지 자산 사용. 실제 데이터는 권리 및 승인 필요. SLF4J 개선 검토 | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
 | UGC-01 / P1 | 사용자 제보 스키마 및 Backend API · DONE | IMG-03B-3. 제출, 리비전, 첨부, 소유자 API 및 제한 | [제보 API](UGC-01_SUBMISSIONS.md) · 미적용 |
-| UGC-02A / P1 | 관리자 제보 검수 Backend · IN_REVIEW | 역할 재검증·후보·리비전·반려·보완 | [검수 API](UGC-02A_ADMIN_REVIEW.md) · 미적용 |
-| UGC-02B / P1 | 이미지 없는 카탈로그 승인 · PLANNED | 02A 및 공개 쓰기 선행 조건. 식별자·원자적 등록 | [인수인계](UGC-02A_ADMIN_REVIEW.md#ugc-02bc-인수인계) · 미적용 |
+| UGC-02A / P1 | 관리자 제보 검수 Backend · DONE | 역할 재검증·후보·리비전·반려·보완 | [QA·병합](UGC-02A_QA_PR17.md#최종-독립-qa와-병합) · 미적용 |
+| UGC-02B / P1 | 이미지 없는 카탈로그 승인 · IN_REVIEW | 02A 및 공개 쓰기 선행 조건. 식별자·원자적 등록 | [공개 승인](UGC-02B_CATALOG_APPROVAL.md) · 미적용 |
 | UGC-02C / P1 | 이미지 권리 및 승인 작업 · PLANNED | 02B. 임대·세대·STAGING→DELIVERY·복구 | [인수인계](UGC-02A_ADMIN_REVIEW.md#ugc-02bc-인수인계) · 미적용 |
 | UGC-03 / P1 | 사용자·관리자 Frontend 화면 · PLANNED | UGC-01/02. 등록·보완·검수 화면 E2E | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
 | UI-01 / P1 | 검색 중심 홈·공통 이미지 처리·E2E/시각 QA · PLANNED | 테스트 이미지로 IMG-03과 독립 진행 가능. 검색/상세·404/대체 이미지·모바일·키보드 회귀 확인. 빌드 시 Google Fonts 의존성을 제거할 수 있도록 기존 라이선스와 디자인을 보존하는 `next/font/local` 전환 검토 | 미등록 · 미적용 |

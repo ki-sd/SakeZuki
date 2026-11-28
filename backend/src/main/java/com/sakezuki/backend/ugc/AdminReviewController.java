@@ -25,9 +25,11 @@ import java.io.IOException;
 class AdminReviewController {
     static final String ROOT = "/api/admin/sake-submissions";
     private final AdminReviewService reviews;
+    private final CatalogApprovalService approvals;
 
-    AdminReviewController(AdminReviewService reviews) {
+    AdminReviewController(AdminReviewService reviews, CatalogApprovalService approvals) {
         this.reviews = reviews;
+        this.approvals = approvals;
     }
 
     @GetMapping
@@ -69,6 +71,14 @@ class AdminReviewController {
                                        HttpServletRequest request) throws IOException {
         return reviews.decide(actor(jwt), SubmissionErrors.uuid(id,404), SubmissionErrors.uuid(key,422),
                 UgcRequestJson.read(request, AdminReviewService.DecisionRequest.class));
+    }
+
+    @PostMapping(path="/{id}/approvals", consumes=MediaType.APPLICATION_JSON_VALUE)
+    CatalogApprovalService.Receipt approve(@AuthenticationPrincipal Jwt jwt, @PathVariable String id,
+                                            @RequestHeader(value="Idempotency-Key", required=false) String key,
+                                            HttpServletRequest request) throws IOException {
+        return approvals.approve(actor(jwt), SubmissionErrors.uuid(id,404), SubmissionErrors.uuid(key,422),
+                UgcRequestJson.read(request, CatalogApprovalService.Request.class));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)

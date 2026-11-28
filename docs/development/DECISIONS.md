@@ -16,3 +16,5 @@
 | DEC-010 | Proposed | IMG-03C와 UGC가 이미지 자산·권리·검증된 객체 계약을 공유한다. 객체 저장과 DB 공개 전환은 개별 단계로 기록하고 활성 자산만 전달한다. | [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) · [V10 구현 및 초기 제공 정책](IMG-03B-3_IMAGE_ASSETS.md) |
 | DEC-011 | Proposed | 내부 PK를 유지하고 대상별 실제 FK 출처 테이블로 전환한다. 백필 검증 이후 레거시 ID에 NULL을 허용하며 신규 Guide 쓰기는 같은 트랜잭션에서 두 표현을 기록한다. | [IMG-03B-1 전환](IMG-03B-1_CATALOG_SOURCES.md) · 구버전 쓰기 작업을 중지한 뒤 전환 |
 | DEC-012 | Accepted | `backend/image-core`를 독립 Java 21 라이브러리로 두고 Backend·Tools의 Gradle composite build로 공유한다. 외부 다운로드·권리 정책은 Tools에서 유지한다. | [공통 모듈](IMG-03B-2_IMAGE_CORE.md) · 기존 Docker 컨텍스트 및 Wrapper 보존 |
+
+- UGC-02B는 승인 입력과 반려·보완 결정을 별도 API 및 원장으로 관리한다. V9 잠금 아래 기존 카탈로그까지 검사하고, 양조장과 정규화한 일본어 이름의 충돌은 현재 검수 단계로 반환한다. [승인 식별·원장 계약](UGC-02B_CATALOG_APPROVAL.md)
