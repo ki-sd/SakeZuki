@@ -193,8 +193,8 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
             <section className="ui-panel space-y-4 p-5 sm:p-7" aria-labelledby="image-form-title">
                 <h2 id="image-form-title" className="text-xl font-semibold">상품 이미지 (선택)</h2>
                 <p className="text-sm text-stone-600">JPEG 또는 PNG, 최대 10 MiB. 첨부는 검토 중 비공개입니다.</p>
-                <label className="grid gap-2 text-sm">이미지 파일
-                    <input ref={fileInput} className="max-w-full text-sm file:mr-3 file:rounded file:border file:border-stone-300 file:bg-white file:px-3 file:py-2"
+                <label className="grid min-w-0 grid-cols-1 gap-2 text-sm">이미지 파일
+                    <input ref={fileInput} className="w-full min-w-0 max-w-full text-sm file:mr-3 file:rounded file:border file:border-stone-300 file:bg-white file:px-3 file:py-2"
                         type="file" accept="image/jpeg,image/png" onChange={e => replaceFile(e.target.files?.[0] ?? null)} /></label>
                 {file && <div className="flex flex-wrap gap-2">
                     <button className="ui-button-secondary" type="button" onClick={() => void uploadSelected()}>이미지 업로드</button>

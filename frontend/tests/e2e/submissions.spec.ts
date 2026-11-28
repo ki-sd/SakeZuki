@@ -91,57 +91,85 @@ test("approval progress keeps the member status separate and hides edit actions"
     await expect(page.getByRole("link",{ name: "공개 사케 보기" })).toHaveAttribute("href","/sake/1");
 });
 
-test("a delayed backend denial and shared cookie rotation never carry a draft across accounts", async ({ page, context }) => {
-    test.setTimeout(120000);
-    test.skip(!process.env.AUTH_TEST_SECOND_EMAIL, "Requires both isolated member fixtures");
+test("delayed backend denials never carry protected writes across browser sessions", async ({ page, context }) => {
+    test.setTimeout(160000);
+    test.skip(!process.env.AUTH_TEST_SECOND_EMAIL || !process.env.AUTH_TEST_FOOD, "Requires isolated member and recommendation fixtures");
     const path = "/account/submissions/new";
-    const aRequest = page.waitForRequest(request => new URL(request.url()).pathname==="/api/user/catalog/breweries");
-    await loginFor(page,path);
-    const aBearer = (await aRequest).headers().authorization;
-
-    const other = await context.newPage();
-    const otherRequest = other.waitForRequest(request => new URL(request.url()).pathname==="/api/user/catalog/breweries");
-    await other.goto(path);
-    await expect(other.getByLabel("사케 한국어 이름 (필수)")).toBeVisible();
-    const otherBearer = (await otherRequest).headers().authorization;
-    expect(!!aBearer && !!otherBearer).toBe(true);
-
-    for (const [index,tab] of [page,other].entries()) {
-        await tab.getByLabel("사케 일본어 이름 (필수)").fill("隔離検証酒");
-        await tab.getByLabel("사케 한국어 이름 (필수)").fill(`이전 세션 초안 ${index}`);
-        await tab.getByLabel("새 양조장 제안").check();
-        await tab.getByLabel("양조장 일본어 이름 (필수)").fill("合成蔵");
-        await tab.getByLabel("양조장 한국어 이름 (필수)").fill("합성 양조장");
+    const root = "/api/user/sake-submissions";
+    const revisionId = "e2e00000-0000-4000-8000-000000000003";
+    const bearers = new Map<Page,string>();
+    function observe(tab: Page) {
+        tab.on("request", request => {
+            if (!new URL(request.url()).pathname.startsWith("/api/")) return;
+            const bearer = request.headers().authorization;
+            if (bearer) bearers.set(tab,bearer);
+        });
     }
-    await expect.poll(async () => {
-        const results = await Promise.all([aBearer,otherBearer].map(Authorization =>
-            context.request.get("/api/user/me",{ headers: { Authorization } })));
-        return results.map(response => response.status());
-    },{ timeout: 75000,intervals: [1000,2000] }).toEqual([401,401]);
+    observe(page);
+    await loginFor(page,path);
 
-    let release!: () => void, denied!: () => void;
+    async function openTab(path: string) {
+        const tab = await context.newPage();
+        observe(tab);
+        await tab.goto(path);
+        await expect(tab.getByRole("button",{ name: "로그아웃",exact: true })).toBeVisible();
+        return tab;
+    }
+
+    const uploadTab = await openTab(path);
+    const reviseTab = await openTab(`/account/submissions/${revisionId}`);
+    const cancelTab = await openTab(`/account/submissions/${revisionId}`);
+    const paidTab = await openTab("/recommend");
+    const tabs = [page,uploadTab,reviseTab,cancelTab,paidTab];
+
+    await page.getByLabel("사케 일본어 이름 (필수)").fill("隔離検証酒");
+    await page.getByLabel("사케 한국어 이름 (필수)").fill("이전 세션 초안");
+    await page.getByLabel("새 양조장 제안").check();
+    await page.getByLabel("양조장 일본어 이름 (필수)").fill("合成蔵");
+    await page.getByLabel("양조장 한국어 이름 (필수)").fill("합성 양조장");
+    const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGMUknNnwAaYsIoOWgkAYt0AhwzkAcIAAAAASUVORK5CYII=","base64");
+    await uploadTab.getByLabel("이미지 파일").setInputFiles({ name: "synthetic.png",mimeType: "image/png",buffer: image });
+    await reviseTab.getByRole("button",{ name: "보완하기",exact: true }).click();
+    await reviseTab.getByLabel("사케 한국어 이름 (필수)").fill("이전 세션 보완");
+    await cancelTab.getByRole("button",{ name: "제보 취소",exact: true }).click();
+    await paidTab.getByRole("textbox",{ name: "음식",exact: true }).fill(process.env.AUTH_TEST_FOOD!);
+    const paidRetry = paidTab.getByRole("button",{ name: "새롭게 추천받기 - 1크레딧",exact: true });
+    const cached = paidTab.getByText("E2E 당시 추천 이유").first();
+    const recommend = paidTab.getByRole("button",{ name: "추천받기",exact: true });
+    await recommend.click();
+    await Promise.race([paidRetry.waitFor(),cached.waitFor()]);
+    if (!(await paidRetry.isVisible())) await recommend.click();
+    await expect(paidRetry).toBeVisible();
+
+    await expect.poll(() => bearers.size).toBe(tabs.length);
+    const captured = tabs.map(tab => bearers.get(tab)!);
+    await expect.poll(async () => {
+        const results = await Promise.all(captured.map(Authorization => context.request.get("/api/user/me",{ headers: { Authorization } })));
+        return results.map(response => response.status());
+    },{ timeout: 75000,intervals: [1000,2000] }).toEqual([401,401,401,401,401]);
+
+    let release!: () => void;
     const held = new Promise<void>(resolve => { release=resolve; });
-    const firstDenial = new Promise<void>(resolve => { denied=resolve; });
-    let firstWrites = 0, secondWrites = 0;
-    await page.route("**/api/user/sake-submissions",async route => {
-        if (route.request().method()!=="POST") return route.continue();
-        firstWrites++;
-        const response = await route.fetch();
-        expect(response.status()).toBe(401);
-        denied();
-        await held;
-        await route.fulfill({ response }).catch(() => undefined);
-    });
-    await other.route("**/api/user/sake-submissions",async route => {
-        if (route.request().method()!=="POST") return route.continue();
-        secondWrites++;
-        const response = await route.fetch();
-        expect(response.status()).toBe(401);
-        await route.fulfill({ response });
-    });
+    const writes = [root,`${root}/uploads`,`${root}/${revisionId}/revisions`,`${root}/${revisionId}/cancel`,"/api/recommend/sake"];
+    const counts = writes.map(() => 0);
+    const denials = await Promise.all(writes.map(async (path,index) => {
+        let denied!: () => void;
+        const responseReady = new Promise<void>(resolve => { denied=resolve; });
+        await tabs[index].route(`**${path}`,async route => {
+            if (route.request().method()!=="POST") return route.continue();
+            counts[index]++;
+            const response = await route.fetch();
+            expect(response.status()).toBe(401);
+            denied();
+            await held;
+            await route.fulfill({ response }).catch(() => undefined);
+        });
+        return { responseReady };
+    }));
     try {
-        await page.getByRole("button",{ name: "제보 제출",exact: true }).click();
-        await firstDenial;
+        for (const [index,button] of ["제보 제출","이미지 업로드","보완 제출","제보 취소 확인","새롭게 추천받기 - 1크레딧"].entries())
+            await tabs[index].getByRole("button",{ name: button,exact: true }).click();
+        await Promise.all(denials.map(denial => denial.responseReady));
         const logout = page.waitForResponse(response => response.url().endsWith("/api/auth/logout") && response.request().method()==="POST");
         await page.getByRole("button",{ name: "로그아웃",exact: true }).click();
         expect((await logout).ok()).toBe(true);
@@ -151,16 +179,15 @@ test("a delayed backend denial and shared cookie rotation never carry a draft ac
         await page.getByRole("button",{ name: "이메일로 로그인" }).click();
         await expect(page).toHaveURL(/\/account\/submissions\/new$/);
         release();
-        await other.getByRole("button",{ name: "제보 제출",exact: true }).click();
-        await expect(other).toHaveURL(/\/login\?returnTo=/);
+        for (const tab of [uploadTab,reviseTab,cancelTab]) await expect(tab).toHaveURL(/\/login\?returnTo=/);
+        await expect(paidTab.getByRole("link",{ name: "로그인",exact: true })).toBeVisible();
         await expect(page.getByLabel("사케 한국어 이름 (필수)")).toHaveValue("");
         await page.getByRole("link",{ name: "내 제보 목록" }).click();
         await expect(page.getByText("이 페이지에 제보가 없습니다.")).toBeVisible();
-        expect(firstWrites).toBe(1);
-        expect(secondWrites).toBe(1);
+        expect(counts).toEqual([1,1,1,1,1]);
     } finally {
         release();
-        await other.close();
+        await Promise.all(tabs.slice(1).map(tab => tab.close()));
     }
 });
 

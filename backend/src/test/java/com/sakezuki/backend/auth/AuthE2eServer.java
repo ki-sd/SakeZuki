@@ -53,21 +53,22 @@ public class AuthE2eServer {
         var sakeNos=db.queryForList("SELECT no FROM SAKE ORDER BY no LIMIT 3",Long.class);
         String food="E2E pairing "+java.util.UUID.randomUUID();
         for(Long sake:sakeNos)db.update("INSERT INTO RECOMMEND_SAKE(food,sake_no,reason) VALUES(?,?,?)",food,sake,"E2E 당시 추천 이유");
-        String submission = "e2e00000-0000-4000-8000-000000000001";
-        db.update("""
-                INSERT INTO CATALOG_SUBMISSION(id,owner_no,status,version,creation_key,payload_hash)
-                VALUES (?,?,'NEEDS_REVISION',1,?,REPEAT('0',64))
-                """,submission,no,submission);
-        db.update("""
-                INSERT INTO SUBMISSION_REVISION(submission_id,revision_no,author_no,author_role,revision_kind,payload)
-                VALUES (?,1,?,'MEMBER','INITIAL',
-                    '{"sake":{"ja":"合成酒","ko":"보완할 사케"},"brewery":{"existingNo":1}}')
-                """,submission,no);
-        db.update("UPDATE CATALOG_SUBMISSION SET current_revision_no=1 WHERE id=?",submission);
-        db.update("""
-                INSERT INTO SUBMISSION_EVENT(submission_id,revision_no,actor_no,actor_role,previous_status,next_status,reason)
-                VALUES (?,1,?,'ADMIN','PENDING','NEEDS_REVISION','사케 이름을 확인해 주세요.')
-                """,submission,no);
+        for (String submission : java.util.List.of("e2e00000-0000-4000-8000-000000000001","e2e00000-0000-4000-8000-000000000003")) {
+            db.update("""
+                    INSERT INTO CATALOG_SUBMISSION(id,owner_no,status,version,creation_key,payload_hash)
+                    VALUES (?,?,'NEEDS_REVISION',1,?,REPEAT('0',64))
+                    """,submission,no,submission);
+            db.update("""
+                    INSERT INTO SUBMISSION_REVISION(submission_id,revision_no,author_no,author_role,revision_kind,payload)
+                    VALUES (?,1,?,'MEMBER','INITIAL',
+                        '{"sake":{"ja":"合成酒","ko":"보완할 사케"},"brewery":{"existingNo":1}}')
+                    """,submission,no);
+            db.update("UPDATE CATALOG_SUBMISSION SET current_revision_no=1 WHERE id=?",submission);
+            db.update("""
+                    INSERT INTO SUBMISSION_EVENT(submission_id,revision_no,actor_no,actor_role,previous_status,next_status,reason)
+                    VALUES (?,1,?,'ADMIN','PENDING','NEEDS_REVISION','사케 이름을 확인해 주세요.')
+                    """,submission,no);
+        }
         String second = System.getenv("AUTH_TEST_SECOND_EMAIL");
         db.update("INSERT INTO MEMBER(email,password,name,address1,phone) VALUES(?,?,?,?,?)", second,
                 context.getBean(PasswordEncoder.class).encode(System.getenv("AUTH_TEST_SECOND_PASSWORD")),
