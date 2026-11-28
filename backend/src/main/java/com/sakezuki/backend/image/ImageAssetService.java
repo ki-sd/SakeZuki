@@ -11,6 +11,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
@@ -21,6 +22,34 @@ public class ImageAssetService {
 
     public static final class QuarantinedImageException extends IllegalStateException {
         QuarantinedImageException() { super("image object requires investigation"); }
+    }
+
+    public record ObjectVersion(long id, long attempt) {}
+    public record Promotion(long grant, ObjectVersion staging, Runnable fence, java.util.function.LongConsumer intent) {}
+
+    public static final class PromotionRejected extends IllegalStateException {
+        private final String code;
+
+        PromotionRejected(String code) {
+            super(code);
+            this.code = code;
+        }
+
+        public String code() { return code; }
+    }
+
+    public static final class PromotionIo extends IOException {
+        private final String code;
+        private final boolean retryable;
+
+        PromotionIo(String code, boolean retryable, Exception cause) {
+            super(code, cause);
+            this.code = code;
+            this.retryable = retryable;
+        }
+
+        public String code() { return code; }
+        public boolean retryable() { return retryable; }
     }
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ImageAssetService.class);
@@ -34,14 +63,31 @@ public class ImageAssetService {
         this.assets = assets;
         this.stores = stores;
         transaction = new TransactionTemplate(manager);
+        transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
 
     // The caller supplies a durable asset ID for retries and a server-owned evidence reference.
     public void stage(UUID id, Source source, String evidence, String mime, byte[] bytes) throws IOException, ImageFailure {
-        Objects.requireNonNull(id);
-        requireRef(evidence, 500);
+        try (var permit = admit()) {
+            permit.stage(id, source, evidence, mime, bytes);
+        }
+    }
+
+    public Processing admit() throws IOException {
         enterProcessing();
-        try {
+        return new Processing();
+    }
+
+    public final class Processing implements AutoCloseable {
+        private boolean closed;
+
+        private Processing() {}
+
+        public void stage(UUID id, Source source, String evidence, String mime, byte[] bytes)
+                throws IOException, ImageFailure {
+            requireOpen();
+            Objects.requireNonNull(id);
+            requireRef(evidence, 500);
             var storage = storage(ImageStores.Area.STAGING);
             var output = ImageTransform.convert(mime, bytes, Set.of());
             var asset = new ImageAssetRepository.Asset(source.name(), evidence, output.original(),
@@ -51,8 +97,24 @@ public class ImageAssetService {
                 return prepare(id, ImageStores.Area.STAGING, asset);
             });
             execute(work, () -> VerifiedImageStorage.store(storage, work.key(), output));
-        } finally {
-            processing.release();
+        }
+
+        public ObjectVersion promote(UUID id, Promotion promotion) throws IOException {
+            requireOpen();
+            return promoteSubmission(id,promotion);
+        }
+
+        private void requireOpen() {
+            requireOutsideTransaction();
+            if (closed) throw new IllegalStateException("image processing permit closed");
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                processing.release();
+            }
         }
     }
 
@@ -86,6 +148,113 @@ public class ImageAssetService {
             execute(destination, () -> VerifiedImageStorage.storeCopy(delivery, copy));
         } finally {
             processing.release();
+        }
+    }
+
+    private ObjectVersion promoteSubmission(UUID id, Promotion promotion) throws IOException {
+        var staging = stores.storage(ImageStores.Area.STAGING)
+                .orElseThrow(() -> new PromotionIo("STORAGE_UNCONFIGURED",true,null));
+        var delivery = stores.storage(ImageStores.Area.DELIVERY)
+                .orElseThrow(() -> new PromotionIo("STORAGE_UNCONFIGURED",true,null));
+        var source = transaction.execute(status -> {
+            promotion.fence().run();
+            var asset = lockValidPromotion(id,promotion);
+            return existing(id,ImageStores.Area.STAGING,asset);
+        });
+        VerifiedImageStorage.Copy copy;
+        try {
+            copy = VerifiedImageStorage.readForCopy(staging,source.key(),source.media());
+        } catch (IOException | ImageFailure failure) {
+            throw promotionFailure(id,promotion,source,"STAGING",failure);
+        }
+        var destination = transaction.execute(status -> {
+            promotion.fence().run();
+            var work = prepare(id,ImageStores.Area.DELIVERY,lockValidPromotion(id,promotion));
+            promotion.intent().accept(work.object().id());
+            return work;
+        });
+        try {
+            VerifiedImageStorage.storeCopy(new DeliveryTransport(delivery),copy);
+        } catch (IOException | ImageFailure failure) {
+            throw promotionFailure(id,promotion,destination,"DELIVERY",failure);
+        }
+        return transaction.execute(status -> {
+            promotion.fence().run();
+            lockValidPromotion(id,promotion);
+            if (!assets.verified(destination.object(),destination.media())) {
+                throw new PromotionRejected("DELIVERY_CHANGED");
+            }
+            return new ObjectVersion(destination.object().id(),destination.object().attempt()+1);
+        });
+    }
+
+    private PromotionIo promotionFailure(UUID id, Promotion promotion, Work work, String area, Exception failure) {
+        Exception cause = failure instanceof DeliveryTransportFailure transfer ? transfer.original : failure;
+        boolean missing = cause instanceof ImageStorage.ObjectMissing;
+        boolean damaged = definitiveDamage(cause);
+        if (missing || damaged || !"VERIFIED".equals(work.object().state())) {
+            transaction.executeWithoutResult(status -> {
+                promotion.fence().run();
+                assets.lockAsset(id);
+                if (!assets.hasGrant(id,promotion.grant())) throw new PromotionRejected("RIGHTS_CHANGED");
+                var object = work.object();
+                assets.failed(object.id(),object.attempt(),object.state(),damaged,failureCode(damaged,missing));
+            });
+        }
+        String phase = failure instanceof DeliveryTransportFailure transfer ? transfer.phase : area;
+        return new PromotionIo(damaged ? area+"_DAMAGED" : missing ? area+"_MISSING" : phase+"_IO",
+                !damaged && !(missing && "STAGING".equals(area)),failure);
+    }
+
+    private record DeliveryTransport(ImageStorage store) implements ImageStorage {
+        @Override
+        public Optional<ObjectInfo> read(ObjectKey key, int max) throws IOException {
+            try {
+                return store.read(key,max);
+            } catch (IOException failure) {
+                throw new DeliveryTransportFailure("DELIVERY_GET",failure);
+            }
+        }
+
+        @Override
+        public boolean createIfAbsent(ObjectKey key, String mime, String hash, byte[] bytes) throws IOException {
+            try {
+                return store.createIfAbsent(key,mime,hash,bytes);
+            } catch (IOException failure) {
+                throw new DeliveryTransportFailure("DELIVERY_PUT",failure);
+            }
+        }
+    }
+
+    private static final class DeliveryTransportFailure extends IOException {
+        private final String phase;
+        private final IOException original;
+
+        DeliveryTransportFailure(String phase, IOException original) {
+            super(phase,original);
+            this.phase = phase;
+            this.original = original;
+        }
+    }
+
+    private ImageAssetRepository.Asset lockValidPromotion(UUID id, Promotion promotion) {
+        var asset = assets.lockAsset(id);
+        if (!assets.hasGrant(id,promotion.grant())) throw new PromotionRejected("RIGHTS_CHANGED");
+        var staging = assets.object(id,ImageStores.Area.STAGING);
+        if (staging.id()!=promotion.staging().id() || staging.attempt()!=promotion.staging().attempt()
+                || !assets.verifiedStaging(id,staging.id(),staging.attempt())) {
+            throw new PromotionRejected("STAGING_CHANGED");
+        }
+        return asset;
+    }
+
+    // The caller holds the job lock and V9; asset and object locks survive until the publication transaction commits.
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void requirePrepared(UUID id, Promotion promotion, ObjectVersion delivery) {
+        var asset = lockValidPromotion(id,promotion);
+        var current = existing(id,ImageStores.Area.DELIVERY,asset).object();
+        if (current.id()!=delivery.id() || current.attempt()!=delivery.attempt() || !"VERIFIED".equals(current.state())) {
+            throw new PromotionRejected("DELIVERY_CHANGED");
         }
     }
 
@@ -188,14 +357,18 @@ public class ImageAssetService {
     }
 
     private void enterProcessing() throws IOException {
-        if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            throw new IllegalStateException("image storage requests must run outside database transactions");
-        }
+        requireOutsideTransaction();
         if (!processing.tryAcquire()) throw new IOException("image processing busy");
     }
 
+    private static void requireOutsideTransaction() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("image storage requests must run outside database transactions");
+        }
+    }
+
     static void requireRef(String reference, int maxLength) {
-        if (reference == null || reference.isBlank() || reference.length() > maxLength
+        if (reference == null || reference.isBlank() || reference.codePointCount(0,reference.length()) > maxLength
                 || reference.codePoints().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("invalid image evidence or actor reference");
         }

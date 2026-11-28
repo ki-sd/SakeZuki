@@ -16,8 +16,8 @@
 | IMG-03C / 실행기·복구·롤백 | PLANNED | IMG-03B-3 | Tools / UGC와 공통 이미지 자산 / 별도 운영 승인 및 SLF4J 개선 검토 |
 | UGC-01 / 제보 스키마·Backend API | DONE | main / [PR #16](https://github.com/ki-sd/SakeZuki/pull/16) | Backend·Flyway / [제보·첨부 API](UGC-01_SUBMISSIONS.md) |
 | UGC-02A / 관리자 검수 | DONE | main · PR #17 | Backend·권한·감사 / [검수 API](UGC-02A_ADMIN_REVIEW.md) |
-| UGC-02B / 이미지 없는 승인 | IN_REVIEW | main / feat/ugc-02b-catalog-approval | [카탈로그·V9·추천 프로필](UGC-02B_CATALOG_APPROVAL.md) |
-| UGC-02C / 이미지 권리·승격 | PLANNED | UGC-02B | 저장·임대·작업 세대·복구 |
+| UGC-02B / 이미지 없는 승인 | DONE | main / feat/ugc-02b-catalog-approval | [카탈로그·V9·추천 프로필](UGC-02B_CATALOG_APPROVAL.md) |
+| UGC-02C / 이미지 권리·승격 | IN_REVIEW | UGC-02B | [저장·임대·작업 세대·복구](UGC-02C_IMAGE_APPROVAL.md) |
 | UGC-03 / 사용자·관리자 화면 | PLANNED | UGC-01/02 | Frontend / 역할, API DTO, 검토·보완 흐름 |
 | UI-01 / 탐색 UI | PLANNED / 미배정 | main / 미생성 / 미등록 | frontend / 합성 이미지 사용 / 이미지 DTO·공통 컴포넌트·lockfile 조율 |
 

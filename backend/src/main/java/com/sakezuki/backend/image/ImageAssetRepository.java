@@ -3,6 +3,7 @@ package com.sakezuki.backend.image;
 import com.sakezuki.imagecore.ImageTransform;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -56,6 +57,16 @@ class ImageAssetRepository {
         }
     }
 
+    boolean hasGrant(UUID id, long grant) {
+        return sql.sql("SELECT id FROM IMAGE_CURRENT_PUBLIC_GRANT WHERE asset_id = ? AND id = ?")
+                .params(id.toString(),grant).query(Long.class).optional().isPresent();
+    }
+
+    boolean verifiedStaging(UUID id, long object, long attempt) {
+        return sql.sql("SELECT object_id FROM UGC_VERIFIED_STAGING WHERE asset_id=? AND object_id=? AND attempt=?")
+                .params(id.toString(),object,attempt).query(Long.class).optional().isPresent();
+    }
+
     void ensureObject(UUID id, ImageStores.Area area, String key, String version) {
         sql.sql("""
                 INSERT INTO IMAGE_OBJECT (asset_id, storage_area, object_key, object_version)
@@ -100,26 +111,34 @@ class ImageAssetRepository {
                 generation, expectedState).update();
     }
 
-    void recordRights(UUID id, ImagePublicationService.Decision decision, String evidence, String actor,
+    long recordRights(UUID id, ImagePublicationService.Decision decision, String evidence, String actor,
                       Instant from, Instant until) {
+        var generated = new GeneratedKeyHolder();
         sql.sql("""
                 INSERT INTO IMAGE_RIGHTS_EVENT (asset_id, decision, scope, evidence_ref, decided_by, valid_from, valid_until)
                 VALUES (?, ?, 'PUBLIC_WEB', ?, ?, ?, ?)
-                """).params(id.toString(), decision.name(), evidence, actor, utc(from), utc(until)).update();
+                """).params(id.toString(), decision.name(), evidence, actor, utc(from), utc(until)).update(generated, "id");
         sql.sql("UPDATE SAKE_IMAGE SET withdrawn_at = UTC_TIMESTAMP(6) WHERE asset_id = ? AND withdrawn_at IS NULL")
                 .param(id.toString()).update();
+        return generated.getKey().longValue();
     }
 
     void attachPrimary(long sakeNo, UUID id) {
+        attachPrimary(sakeNo, id, null, null);
+    }
+
+    void attachPrimary(long sakeNo, UUID id, Long object, Long grant) {
         sql.sql("SELECT no FROM SAKE WHERE no = ? FOR UPDATE").param(sakeNo)
                 .query(Long.class).optional().orElseThrow(() -> new IllegalArgumentException("unknown sake"));
-        if (publicImage(sakeNo, id).isPresent()) return;
+        if (object == null && publicImage(sakeNo, id).isPresent()) return;
         sql.sql("UPDATE SAKE_IMAGE SET withdrawn_at = UTC_TIMESTAMP(6) WHERE active_primary_sake = ?")
                 .param(sakeNo).update();
         int inserted = sql.sql("""
                 INSERT INTO SAKE_IMAGE (sake_no, asset_id, object_id, rights_event_id, is_primary)
-                SELECT ?, asset_id, object_id, rights_event_id, TRUE FROM IMAGE_DELIVERY_CANDIDATE WHERE asset_id = ?
-                """).params(sakeNo, id.toString()).update();
+                SELECT :sake, asset_id, object_id, rights_event_id, TRUE
+                FROM IMAGE_DELIVERY_CANDIDATE WHERE asset_id = :asset
+                  AND (:object IS NULL OR object_id = :object AND rights_event_id = :grant)
+                """).param("sake", sakeNo).param("asset", id.toString()).param("object", object).param("grant", grant).update();
         if (inserted != 1) throw new IllegalStateException("verified delivery object and current public grant required");
     }
 
