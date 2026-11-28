@@ -106,6 +106,19 @@ class CatalogMigrationTests {
         assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM PUBLIC_SAKE_IMAGE", Integer.class));
     }
 
+    @Test
+    void freshDatabaseAndV10UpgradeInstallSubmissionSchema() {
+        assertEquals(11, flyway("11").migrate().migrationsExecuted);
+        assertCompleteBackfill();
+        assertEquals(0, count("CATALOG_SUBMISSION"));
+        flyway("11").clean();
+        assertEquals(10, flyway("10").migrate().migrationsExecuted);
+        var before = db.queryForList("SELECT * FROM SAKE ORDER BY no");
+        assertEquals(1, flyway("11").migrate().migrationsExecuted);
+        assertEquals(before, db.queryForList("SELECT * FROM SAKE ORDER BY no"));
+        assertEquals(0, count("SUBMISSION_REVISION"));
+    }
+
     private void assertCompleteBackfill() {
         assertEquals(10_337, count("SAKE"));
         for (String table : CATALOG) {

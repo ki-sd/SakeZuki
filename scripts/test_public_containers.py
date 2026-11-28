@@ -106,6 +106,10 @@ def main():
             assert len(json.loads(examples)) == 4
             fetch(plain_client, http_origin + "/api/user/account", 401)
             fetch(plain_client, http_origin + "/api/auth/login", 403, b"{}")
+            ugc = http_origin + "/api/user/sake-submissions"
+            fetch(plain_client, ugc, 413, b"x" * 17000)
+            fetch(plain_client, ugc + "/uploads", 401, b"x" * 17000)
+            print("UGC proxy body limit: JSON rejected; larger upload requires authentication PASS", flush=True)
             print("Linux HTTP containers: landing, public examples, readiness, 401/403 PASS", flush=True)
             # 셀프서명 인증서는 이 테스트의 trust store에만 넣는다. 운영 인증서 검증을 비활성화하지 않는다.
             subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(temp / "privkey.pem"),

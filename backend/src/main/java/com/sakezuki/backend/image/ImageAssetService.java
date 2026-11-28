@@ -19,6 +19,12 @@ import java.util.concurrent.Semaphore;
 public class ImageAssetService {
     public enum Source { SAKE_GUIDE, USER_SUBMISSION, ADMIN, BREWERY_OFFICIAL }
 
+    public static final class QuarantinedImageException extends IllegalStateException {
+        QuarantinedImageException() { super("image object requires investigation"); }
+    }
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ImageAssetService.class);
+
     private final ImageAssetRepository assets;
     private final ImageStores stores;
     private final TransactionTemplate transaction;
@@ -108,7 +114,7 @@ public class ImageAssetService {
         assets.ensureObject(id, area, key.value(), asset.version());
         var work = existing(id, area, asset);
         if ("PERMANENT_FAILURE".equals(work.object().state())) {
-            throw new IllegalStateException("image object requires investigation");
+            throw new QuarantinedImageException();
         }
         return new Work(assets.begin(work.object(), false), work.key(), work.media());
     }
@@ -149,10 +155,20 @@ public class ImageAssetService {
     }
 
     void reportPublicReadFailure(ImageAssetRepository.PublicImage image, IOException failure) {
+        reportVerifiedReadFailure(image.objectId(), image.generation(), failure);
+    }
+
+    public void reportVerifiedReadFailure(long objectId, long generation, IOException failure) {
         boolean integrity = definitiveDamage(failure);
         boolean missing = failure instanceof ImageStorage.ObjectMissing;
         if (integrity || missing) {
-            assets.failed(image.objectId(), image.generation(), "VERIFIED", integrity, failureCode(integrity, missing));
+            try {
+                assets.failed(objectId, generation, "VERIFIED", integrity, failureCode(integrity, missing));
+            } catch (RuntimeException updateFailure) {
+                log.warn(
+                        "Image read state update failed: storage={}, database={}",
+                        failure.getClass().getSimpleName(), updateFailure.getClass().getSimpleName());
+            }
         }
     }
 
