@@ -47,7 +47,18 @@ class AdminReviewRepository {
     }
 
     record Head(String id, long owner, String status, long version, int revision,
-                String nameJa, String nameKo, LocalDateTime createdAt, LocalDateTime updatedAt) {}
+                String nameJa, String nameKo, LocalDateTime createdAt, LocalDateTime updatedAt, JobSummary approvalJob) {}
+    record JobSummary(long id, String state, boolean active, int attempts, String failureCode) {}
+
+    private static final String JOB_FIELDS = """
+            j.id AS job_id,j.state AS job_state,j.active_submission IS NOT NULL AS job_active,
+            j.attempts AS job_attempts,j.failure_code AS job_failure
+            """;
+    private static final String JOB_JOIN = """
+            LEFT JOIN SUBMISSION_IMAGE_APPROVAL_JOB j ON j.id=(
+                SELECT MAX(recent.id) FROM SUBMISSION_IMAGE_APPROVAL_JOB recent
+                WHERE recent.submission_id=s.id)
+            """;
     record Revision(int number, Integer parent, long author, String role, int schema, String kind,
                     String payload, String attachmentId, String attachmentStatus, String stagingState,
                     String rightsState, boolean previewable, LocalDateTime createdAt) {}
@@ -60,18 +71,19 @@ class AdminReviewRepository {
     record Source(long sakeNo, String system, String externalKey) {}
 
     List<Head> list(Status status, Sort sort, String query, int offset, int limit) {
-        String statement = """
+        String order = " ORDER BY s." + (sort == Sort.CREATED ? "created_at" : "updated_at") + " DESC, s.id DESC";
+        String page = """
                 SELECT s.id,s.owner_no,s.status,s.version,s.current_revision_no,s.created_at,s.updated_at,
                        %1$s AS name_ja, %2$s AS name_ko
                 FROM CATALOG_SUBMISSION s
                 JOIN SUBMISSION_REVISION r ON r.submission_id=s.id AND r.revision_no=s.current_revision_no
                 WHERE 1=1
-                """.formatted(jsonName("ja"), jsonName("ko")) + (status == null ? "" : " AND s.status=:status\n")
+                """.formatted(jsonName("ja"),jsonName("ko")) + (status == null ? "" : " AND s.status=:status\n")
                 + (query == null || query.isEmpty() ? "" : """
                     AND (%s LIKE :search ESCAPE '!' OR %s LIKE :search ESCAPE '!' OR %s LIKE :search ESCAPE '!')
-                    """.formatted(jsonName("ja"), jsonName("ko"), jsonName("kana")))
-                + " ORDER BY s." + (sort == Sort.CREATED ? "created_at" : "updated_at")
-                + " DESC, s.id DESC LIMIT :limit OFFSET :offset";
+                    """.formatted(jsonName("ja"),jsonName("ko"),jsonName("kana")))
+                + order + " LIMIT :limit OFFSET :offset";
+        String statement = "SELECT s.*, " + JOB_FIELDS + " FROM (" + page + ") s " + JOB_JOIN + order;
         var params = sql.sql(statement).param("limit", limit).param("offset", offset);
         if (status != null) params.param("status", status.name());
         if (query != null && !query.isEmpty()) params.param("search", "%" + escapeLike(query) + "%");
@@ -84,10 +96,11 @@ class AdminReviewRepository {
     }
 
     Optional<Head> find(UUID id, boolean lock) {
+        String fields = lock ? "NULL AS job_id" : JOB_FIELDS;
         String query = """
-                SELECT id,owner_no,status,version,current_revision_no,created_at,updated_at,
-                       NULL AS name_ja,NULL AS name_ko FROM CATALOG_SUBMISSION WHERE id=?
-                """;
+                SELECT s.id,s.owner_no,s.status,s.version,s.current_revision_no,s.created_at,s.updated_at,
+                       NULL AS name_ja,NULL AS name_ko,
+                """ + fields + " FROM CATALOG_SUBMISSION s " + (lock ? "" : JOB_JOIN) + " WHERE s.id=?";
         return sql.sql(lock ? query + " FOR UPDATE" : query).param(id.toString())
                 .query(AdminReviewRepository::head).optional();
     }
@@ -208,9 +221,12 @@ class AdminReviewRepository {
     }
 
     private static Head head(ResultSet rs, int row) throws SQLException {
+        Long jobId = rs.getObject("job_id",Long.class);
+        var job = jobId == null ? null : new JobSummary(jobId,rs.getString("job_state"),rs.getBoolean("job_active"),
+                rs.getInt("job_attempts"),rs.getString("job_failure"));
         return new Head(rs.getString("id"),rs.getLong("owner_no"),rs.getString("status"),rs.getLong("version"),
                 rs.getInt("current_revision_no"),rs.getString("name_ja"),rs.getString("name_ko"),
-                rs.getObject("created_at",LocalDateTime.class),rs.getObject("updated_at",LocalDateTime.class));
+                rs.getObject("created_at",LocalDateTime.class),rs.getObject("updated_at",LocalDateTime.class),job);
     }
 
     private static Revision revision(ResultSet rs, int row) throws SQLException {

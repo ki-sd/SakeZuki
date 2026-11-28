@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useSessionGuard } from "@/components/auth/AuthProvider";
 import Header from "@/components/layout/Header";
 import { errorMessage, signupInfo, signupPolicy, socialSignup } from "@/app/api/auth";
 import { formatPhone } from "@/commons/phone";
 
 export default function SocialSignup() {
+    const guard = useSessionGuard();
     const router = useRouter();
     const info = useQuery({ queryKey: ["social-signup-info"], queryFn: signupInfo, retry: false, staleTime: Infinity, gcTime: 0, refetchOnWindowFocus: false });
     const policy = useQuery({ queryKey: ["signup-policy"], queryFn: signupPolicy, retry: false });
@@ -21,11 +23,13 @@ export default function SocialSignup() {
         if (busy || error || !consent || !policy.data?.enabled) return;
         const data = new FormData(event.currentTarget);
         setBusy(true);
+        const operation = socialSignup({ address1: String(data.get("address1")).trim(), address2: String(data.get("address2")).trim(), phone: String(data.get("phone")).trim(), termsVersion: policy.data.termsVersion, privacyVersion: policy.data.privacyVersion });
+        const valid = guard();
         try {
-            await socialSignup({ address1: String(data.get("address1")).trim(), address2: String(data.get("address2")).trim(), phone: String(data.get("phone")).trim(), termsVersion: policy.data.termsVersion, privacyVersion: policy.data.privacyVersion });
-            router.replace("/account");
-        } catch (error) { setError(errorMessage(error)); }
-        finally { setBusy(false); }
+            await operation;
+            if (valid()) router.replace("/account");
+        } catch (error) { if (valid()) setError(errorMessage(error)); }
+        finally { if (valid()) setBusy(false); }
     }
     return <><Header /><main id="main-content" className="page-shell py-12">
         <section className="ui-panel mx-auto max-w-lg p-6 sm:p-9">

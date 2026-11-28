@@ -1482,6 +1482,9 @@ class UgcMySqlTests {
         assertEquals(1,result.path("attempts").intValue());
         long sake = result.path("approval").path("sakeNo").longValue();
         assertTrue(sake>0);
+        var ownerSummary = node(get(fixture.owner(),ROOT+"/"+fixture.submission())).path("submission");
+        assertEquals(sake,ownerSummary.path("sakeNo").longValue());
+        assertFalse(ownerSummary.path("approvalInProgress").booleanValue());
         assertEquals(result,enqueue(fixture));
         String publicPath = "/api/images/sakes/"+sake+"/"+fixture.asset();
         var served = get(null,publicPath);
@@ -1806,6 +1809,144 @@ class UgcMySqlTests {
             delivery.writesFail = false;
         }
         assertEquals(200,post(fixture.owner(),ROOT+"/"+fixture.submission()+"/cancel",null,Map.of("expectedVersion",0)).statusCode());
+    }
+
+    @Test
+    void ownerAndAdminReadOnlyApprovalStateWithTheirOwnProjections() throws Exception {
+        var fixture = newImageApproval();
+        long job = enqueue(fixture).path("id").longValue();
+        assertOwnerJobFlag(fixture,true);
+        assertEquals(404,get(member("ROLE_USER"),ROOT+"/"+fixture.submission()).statusCode());
+        var adminPage = node(get(fixture.admin(),ADMIN+"?status=PENDING&size=50"));
+        var summary = item(adminPage,fixture.submission()).path("approvalJob");
+        assertEquals(job,summary.path("id").longValue());
+        assertTrue(summary.path("active").booleanValue());
+        assertEquals("PENDING",summary.path("state").asString());
+        db.update("""
+                UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET state='PROCESSING',generation=1,attempts=1,
+                    due_at=UTC_TIMESTAMP(6)+INTERVAL 1 MINUTE,last_attempt_at=UTC_TIMESTAMP(6) WHERE id=?
+                """,job);
+        assertOwnerJobFlag(fixture,true);
+        db.update("""
+                UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET state='RETRYABLE_FAILURE',failure_code='TEST_STORAGE'
+                 WHERE id=?
+                """,job);
+        assertOwnerJobFlag(fixture,true);
+        var adminDetail = node(get(fixture.admin(),adminPath(fixture.submission())));
+        assertEquals("TEST_STORAGE",adminDetail.path("submission").path("approvalJob").path("failureCode").asString());
+        assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+job+"/cancel",null,Map.of()).statusCode());
+        assertOwnerJobFlag(fixture,false);
+        var next = post(fixture.admin(),adminPath(fixture.submission())+"/image-approvals",UUID.randomUUID(),fixture.input());
+        assertEquals(202,next.statusCode(),string(next));
+        long latest = node(next).path("id").longValue();
+        db.update("""
+                UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET state='REQUIRES_REVIEW',failure_code='TEST_REVIEW',due_at=NULL
+                WHERE id=?
+                """,latest);
+        assertOwnerJobFlag(fixture,false);
+        var recent = node(get(fixture.admin(),adminPath(fixture.submission()))).path("submission").path("approvalJob");
+        assertEquals(latest,recent.path("id").longValue());
+        assertFalse(recent.path("active").booleanValue());
+    }
+
+    @Test
+    void adminQueuePagesFiftyAndFiveBeforeReadingTheLatestWork() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String marker = "page-fixture-"+UUID.randomUUID();
+        var expected = new ArrayList<String>();
+        for (int i=0;i<55;i++) {
+            String id = UUID.randomUUID().toString();
+            expected.add(id);
+            db.update("""
+                    INSERT INTO CATALOG_SUBMISSION(id,owner_no,status,creation_key,payload_hash,created_at)
+                    VALUES (?,?,'PENDING',?,REPEAT('0',64),'2025-01-01 00:00:00')
+                    """,id,admin.no(),id);
+            db.update("""
+                    INSERT INTO SUBMISSION_REVISION(submission_id,revision_no,author_no,author_role,revision_kind,payload)
+                    VALUES (?,1,?,'MEMBER','INITIAL',?)
+                    """,id,admin.no(),json.writeValueAsString(Map.of("sake",Map.of("ja",marker,"ko","테스트"),"brewery",Map.of("existingNo",1))));
+            db.update("UPDATE CATALOG_SUBMISSION SET current_revision_no=1,updated_at='2025-02-01 00:00:00'+INTERVAL ? SECOND WHERE id=?",i,id);
+        }
+        for (String sort : List.of("CREATED","UPDATED")) {
+            String path = ADMIN+"?q="+marker+"&size=50&status=PENDING&sort="+sort;
+            var firstPage = node(get(admin,path));
+            var nextPage = node(get(admin,path+"&page=1"));
+            assertEquals(50,firstPage.path("items").size());
+            assertTrue(firstPage.path("hasMore").booleanValue());
+            assertEquals(5,nextPage.path("items").size());
+            assertFalse(nextPage.path("hasMore").booleanValue());
+            var actual = new ArrayList<String>();
+            for (var page : List.of(firstPage,nextPage)) {
+                for (var row : page.path("items")) {
+                    actual.add(row.path("id").asString());
+                    assertTrue(row.path("approvalJob").isNull());
+                }
+            }
+            assertEquals(sort.equals("UPDATED") ? expected.reversed() : expected.stream().sorted(Comparator.reverseOrder()).toList(),actual);
+        }
+        assertEquals(0,node(get(admin,ADMIN+"?q="+marker+"&status=REJECTED")).path("items").size());
+    }
+
+    @Test
+    void readyUploadReplayDoesNotNeedTheImagePermitOrUseStorage() throws Exception {
+        var owner = member("ROLE_USER");
+        var key = UUID.randomUUID();
+        byte[] bytes = image("png");
+        var first = upload(owner,key,"image/png",bytes);
+        assertEquals(201,first.statusCode());
+        int reads = staging.readRequests.get();
+        int writes = staging.writeRequests.get();
+        try (var permit = images.admit()) {
+            var replay = upload(owner,key,"image/png",bytes);
+            assertEquals(201,replay.statusCode(),string(replay));
+            assertEquals(node(first),node(replay));
+            assertEquals(409,upload(owner,key,"image/jpeg",image("jpeg")).statusCode());
+            assertEquals(503,upload(owner,UUID.randomUUID(),"image/jpeg",image("jpeg")).statusCode());
+        }
+        assertEquals(reads,staging.readRequests.get());
+        assertEquals(writes,staging.writeRequests.get());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT WHERE owner_no=?",Integer.class,owner.no()));
+    }
+
+    @Test
+    void disabledWorkerRejectsRetryButKeepsExistingReadReplayAndCancellation() throws Exception {
+        var fixture = newImageApproval();
+        long job = enqueue(fixture).path("id").longValue();
+        db.update("""
+                UPDATE SUBMISSION_IMAGE_APPROVAL_JOB SET state='RETRYABLE_FAILURE',generation=1,attempts=1,
+                    failure_code='TEST_STORAGE',last_attempt_at=UTC_TIMESTAMP(6) WHERE id=?
+                """,job);
+        Object service = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(imageApprovals);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"enabled",false);
+        try {
+            String retry = jobPath(fixture)+"/"+job+"/retry";
+            assertEquals(403,post(fixture.owner(),retry,null,Map.of()).statusCode());
+            assertEquals("RETRYABLE_FAILURE",jobView(fixture).path("state").asString());
+            assertEquals(503,post(fixture.admin(),retry,null,Map.of()).statusCode());
+            assertEquals(job,enqueue(fixture).path("id").longValue());
+            assertEquals(200,post(fixture.admin(),jobPath(fixture)+"/"+job+"/cancel",null,Map.of()).statusCode());
+        } finally {
+            org.springframework.test.util.ReflectionTestUtils.setField(service,"enabled",true);
+        }
+    }
+
+    private void assertOwnerJobFlag(ImageApprovalFixture fixture, boolean active) throws Exception {
+        var detail = get(fixture.owner(),ROOT+"/"+fixture.submission());
+        assertEquals(200,detail.statusCode());
+        var submission = node(detail).path("submission");
+        assertTrue(submission.path("approvalInProgress").isBoolean());
+        assertEquals(active,submission.path("approvalInProgress").booleanValue());
+        assertEquals("PENDING",submission.path("status").asString());
+        assertTrue(submission.path("sakeNo").isNull());
+        for (String internal : List.of("approvalJob","failureCode","rightsEventId","leaseUntil","generation","objectKey")) {
+            assertFalse(string(detail).contains(json.writeValueAsString(internal)),internal);
+        }
+        assertEquals(active,item(node(get(fixture.owner(),ROOT)),fixture.submission()).path("approvalInProgress").booleanValue());
+    }
+
+    private static JsonNode item(JsonNode page, String id) {
+        for (var item : page.path("items")) if (id.equals(item.path("id").asString())) return item;
+        throw new AssertionError("submission is missing from page");
     }
 
     private record ImageApprovalFixture(Member owner,Member admin,String name,String submission,String asset,UUID key,

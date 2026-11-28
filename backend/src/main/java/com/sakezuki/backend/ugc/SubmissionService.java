@@ -30,11 +30,9 @@ class SubmissionService {
     }
 
     record Receipt(String id, String status, long version, int currentRevision) {}
-    record Summary(String id, String status, long version, int currentRevision,
-                   LocalDateTime createdAt, LocalDateTime updatedAt) {}
     record RevisionView(int number, Integer parent, int schemaVersion, String kind, JsonNode data,
                         String attachmentId, String previewUrl, LocalDateTime createdAt) {}
-    record Detail(Summary submission, List<RevisionView> revisions, List<SubmissionRepository.Event> events) {}
+    record Detail(SubmissionRepository.Summary submission, List<RevisionView> revisions, List<SubmissionRepository.Event> events) {}
     record Page<T>(List<T> items, int page, int size, boolean hasMore) {}
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -90,16 +88,16 @@ class SubmissionService {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Detail detail(long owner, UUID id) {
-        var item = submissions.find(owner, id, false).orElseThrow(SubmissionErrors::missing);
+        var item = submissions.summary(owner, id).orElseThrow(SubmissionErrors::missing);
         var versions = submissions.revisions(owner, item.id()).stream().map(r -> new RevisionView(
                 r.number(), r.parent(), r.schemaVersion(), r.kind(), json.readTree(r.payload()), r.attachment(),
                 open(item.status()) && r.attachment() != null
                         ? UgcController.ROOT + "/" + item.id() + "/attachments/" + r.attachment() : null, r.createdAt())).toList();
-        return new Detail(summary(item), versions, submissions.events(owner, item.id()));
+        return new Detail(item, versions, submissions.events(owner, item.id()));
     }
 
-    Page<Summary> list(long owner, int page, int size) {
-        var rows = submissions.list(owner, offset(page, size), size + 1).stream().map(SubmissionService::summary).toList();
+    Page<SubmissionRepository.Summary> list(long owner, int page, int size) {
+        var rows = submissions.list(owner, offset(page, size), size + 1);
         return page(rows, page, size);
     }
 
@@ -135,10 +133,6 @@ class SubmissionService {
         if (prior.version() != expected) throw SubmissionErrors.conflict();
         jobs.requireInactive(prior.id());
         return prior;
-    }
-
-    private static Summary summary(SubmissionRepository.Submission item) {
-        return new Summary(item.id(), item.status(), item.version(), item.revision(), item.createdAt(), item.updatedAt());
     }
 
     private static boolean open(String status) {

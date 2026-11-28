@@ -78,7 +78,7 @@ class AdminReviewService {
         if (current.number() != head.revision()) throw new IllegalStateException("submission revision pointer mismatch");
         var names = current.data().path("sake");
         var summary = new AdminReviewRepository.Head(head.id(), head.owner(), head.status(), head.version(), head.revision(),
-                names.path("ja").asString(), names.path("ko").asString(), head.createdAt(), head.updatedAt());
+                names.path("ja").asString(), names.path("ko").asString(), head.createdAt(), head.updatedAt(),head.approvalJob());
         return new Detail(summary, versions.getFirst(), current, versions.stream()
                 .filter(r -> r.number() != 1 && r.number() != current.number()).toList(), reviews.events(head));
     }

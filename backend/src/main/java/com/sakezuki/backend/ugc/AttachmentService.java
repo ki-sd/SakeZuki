@@ -53,15 +53,21 @@ class AttachmentService {
             throw SubmissionErrors.error(415, "JPEG 또는 PNG만 업로드할 수 있습니다.");
         }
         if (bytes.length == 0) throw SubmissionInput.invalid("file");
+        String hash = mime + ":" + ImageTransform.sha256(bytes);
+        var ready = uploads.ready(owner,key);
+        if (ready.isPresent()) {
+            if (!hash.equals(ready.get().hash())) throw SubmissionErrors.conflict();
+            return receipt(ready.get());
+        }
         try (var permit = images.admit()) {
-            return uploadAdmitted(owner,key,mime,bytes,permit);
+            return uploadAdmitted(owner,key,mime,bytes,hash,permit);
         } catch (IOException busy) {
             throw unavailable();
         }
     }
 
-    private Upload uploadAdmitted(long owner, UUID key, String mime, byte[] bytes, ImageAssetService.Processing permit) {
-        String hash = mime + ":" + ImageTransform.sha256(bytes);
+    private Upload uploadAdmitted(long owner, UUID key, String mime, byte[] bytes, String hash,
+                                  ImageAssetService.Processing permit) {
         var intent = transaction.execute(status -> claim(owner, key, hash));
         if ("READY".equals(intent.status())) return receipt(intent);
 

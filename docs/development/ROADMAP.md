@@ -16,8 +16,9 @@
 | UGC-01 / P1 | 사용자 제보 스키마 및 Backend API · DONE | IMG-03B-3. 제출, 리비전, 첨부, 소유자 API 및 제한 | [제보 API](UGC-01_SUBMISSIONS.md) · 미적용 |
 | UGC-02A / P1 | 관리자 제보 검수 Backend · DONE | 역할 재검증·후보·리비전·반려·보완 | [QA·병합](UGC-02A_QA_PR17.md#최종-독립-qa와-병합) · 미적용 |
 | UGC-02B / P1 | 이미지 없는 카탈로그 승인 · DONE | 02A 및 공개 쓰기 선행 조건. 식별자·원자적 등록 | [공개 승인](UGC-02B_CATALOG_APPROVAL.md) · 미적용 |
-| UGC-02C / P1 | 이미지 권리 및 승인 작업 · IN_REVIEW | 02B. 임대·세대·STAGING→DELIVERY·복구 | [이미지 승인](UGC-02C_IMAGE_APPROVAL.md) · 미적용 |
-| UGC-03 / P1 | 사용자·관리자 Frontend 화면 · PLANNED | UGC-01/02. 등록·보완·검수 화면 E2E | [설계](UGC_CATALOG_ARCHITECTURE.md) · 미적용 |
+| UGC-02C / P1 | 이미지 권리 및 승인 작업 · DONE | 02B. 임대·세대·STAGING→DELIVERY·복구 | [이미지 승인](UGC-02C_IMAGE_APPROVAL.md) · 미적용 |
+| UGC-03A / P1 | 사용자 제보 Frontend · IN_REVIEW | 등록·첨부·내 제보·보완·취소 | [사용자 제보](UGC-03A_SUBMISSION_UI.md) · 미적용 |
+| UGC-03B / P1 | 관리자 검수 Frontend · PLANNED | 큐·비교·권리·리비전·승인 작업 | [관리자 승인 API](UGC-02C_IMAGE_APPROVAL.md) · 미적용 |
 | UI-01 / P1 | 검색 중심 홈·공통 이미지 처리·E2E/시각 QA · PLANNED | 테스트 이미지로 IMG-03과 독립 진행 가능. 검색/상세·404/대체 이미지·모바일·키보드 회귀 확인. 빌드 시 Google Fonts 의존성을 제거할 수 있도록 기존 라이선스와 디자인을 보존하는 `next/font/local` 전환 검토 | 미등록 · 미적용 |
 | OPS-01 / P2 | OCI ARM64 재배포 · PLANNED | 적용 후보·백업/복원 확인·사용자 승인. 운영 SHA, health, 볼륨과 데이터 보존 기록 | 미등록 · 기존 내부 기동만 사용자 확인 |
 | OPS-02 / P2 | 도메인·HTTPS·Google OAuth 운영 검증 · BLOCKED | 도메인·인증서·redirect URI 승인 후 실제 왕복과 쿠키·프록시 확인 | 미등록 · 미적용 |

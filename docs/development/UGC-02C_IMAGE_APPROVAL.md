@@ -56,3 +56,7 @@ STAGING 읽기 준비, DELIVERY intent 및 V10 attempt 변경, VERIFIED 또는 �
 격리 MySQL 8.4.13과 분리 Fake Storage를 사용한다. 테스트의 저장소 구현은 GET·PUT마다 활성 트랜잭션이 없는지 확인한다. 기존 합성·모의 S3 테스트를 유지한다. HTTP 경로에서 등록·중복·권리·리비전·작업 중 변경 차단과 완료 영수증을 검사한다. 실제 MySQL에서 V13→V14와 빈 DB 적용, UNIQUE·FK·CHECK, 두 연결의 동시 획득, 만료된 이전 generation, V10 attempt 보호, V9 1205 및 동일 작업 회복을 재현한다. 등록 실패의 권리 롤백, 최종 참조·원장·감사·작업 완료의 실패 후 전체 롤백, 손상·응답 유실·재시도 상한, 사용자 permit 경합을 검증한다. 하네스와 최신 CI 링크는 PR 증거를 참조한다.
 
 독립 QA는 별도 JVM 간 임대 경합, 권리 철회와 최종 커밋 양방향 경쟁, 스토리지 장기 정지 뒤 이전 응답, 미커밋 공개 읽기, 1213, 순차·동시 Guide 쓰기와 배치 부하에 집중한다. 실제 R2, 운영 DB, OCI 및 Gemini는 검증에 사용하지 않았다.
+
+## 최종 독립 QA 및 병합
+
+사용자 제공 Antigravity 최종 판정은 `49da64d7f26f7ebc655bbe5afc1f10bc1464ffea`에서 **PASS**였다. 공식 JVM 231/231, 독립 프로브 174/174(단일 JVM 160, 다중 JVM·복구 14), P0/P1/P2 0건, 비차단 P3 6건이다. 별도 JVM 2개의 SKIP LOCKED 작업 처리, 10개 중단 지점의 작업·V10 객체 세대 보호, SIGKILL 3지점 복구, 실제 MySQL 1205/1213, 공개 10단계 롤백, 권한·권리 철회의 양방향 경쟁, DB 트랜잭션 내부 스토리지 I/O 0건이 포함됐다. Frontend 단위 16·Chromium 11 및 Linux Docker HTTP/HTTPS는 같은 HEAD의 원격 CI에서 확인했다. GitHub PR API와 원격 main에서 병합 커밋 `18331d21695e146578a1b5748d1d6270ff86ab65`를 확인했다. 실제 R2·OCI ARM64·운영 DB는 미검증 상태다. [PR #19](https://github.com/ki-sd/SakeZuki/pull/19) · [원격 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46144622309)

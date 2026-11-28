@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { useAuth, useSessionGuard } from "@/components/auth/AuthProvider";
 import { errorMessage } from "@/app/api/auth";
 import { getAccount, getHistory, getLedger, startVerification } from "@/app/api/account";
 
 const date = (epoch: number) => new Date(epoch * 1000).toLocaleString("ko-KR");
 const kinds: Record<string, string> = { GRANT: "최초 무료 지급", RESERVE: "추천 예약", COMMIT: "추천 완료", REFUND: "예약 복구" };
 export default function AccountPage() {
-    const { status, member } = useAuth(); const router = useRouter();
+    const { status, member } = useAuth(); const guard = useSessionGuard(); const router = useRouter();
     const [page, setPage] = useState(0); const [ledgerPage, setLedgerPage] = useState(0);
     const [consent, setConsent] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
     const enabled = status === "authenticated";
@@ -24,11 +24,14 @@ export default function AccountPage() {
     async function verify() {
         if (!account.data || !consent || busy) return;
         setBusy(true); setError("");
+        const valid = guard();
         try {
             const challenge = await startVerification(account.data);
+            if (!valid()) return;
             sessionStorage.setItem("sakezuki-verification", challenge.requestId);
             window.location.assign(challenge.redirectUrl);
-        } catch (error) { setError(errorMessage(error)); setBusy(false); }
+        } catch (error) { if (valid()) setError(errorMessage(error)); }
+        finally { setBusy(false); }
     }
     return <><Header /><main id="main-content" className="page-shell space-y-7 py-10 sm:py-14">
         <header><p className="text-sm text-stone-500">회원 정보와 나의 페어링</p><h1 className="mt-3 text-3xl font-semibold">내 계정</h1></header>
@@ -50,7 +53,7 @@ export default function AccountPage() {
                             <button className="ui-button" disabled={!consent || busy} onClick={verify}>본인확인 시작</button>
                         </div> : <div className="mt-3 text-sm leading-7 text-stone-600"><p>본인확인 서비스 연결을 준비 중입니다. 지금은 인증을 완료할 수 없으며, 연결 후 최초 확인 시 {account.data.initialGrant}크레딧을 지급합니다.</p><p>사케 탐색과 무료 공개 예시는 바로 이용할 수 있습니다.</p></div>)}
                     </>}
-                <div className="mt-6 flex flex-wrap gap-3"><Link href="/examples" className="ui-button-secondary">무료 페어링 예시 보기</Link><Link href="/recommend" className="ui-button-secondary">AI 추천 이용 안내</Link></div>
+                <div className="mt-6 flex flex-wrap gap-3"><Link href="/account/submissions" className="ui-button-secondary">내 사케 제보</Link><Link href="/examples" className="ui-button-secondary">무료 페어링 예시 보기</Link><Link href="/recommend" className="ui-button-secondary">AI 추천 이용 안내</Link></div>
             </section>
             <section className="ui-panel p-6 sm:p-8" aria-labelledby="history-title">
                 <h2 id="history-title" className="text-xl font-semibold">최근 추천 기록</h2><p className="mt-3 text-sm leading-7 text-stone-600">완료 후 {account.data?.historyDays ?? 30}일 동안 당시 받은 결과를 무료로 다시 볼 수 있습니다. 만료된 기록은 표시되지 않습니다.</p>

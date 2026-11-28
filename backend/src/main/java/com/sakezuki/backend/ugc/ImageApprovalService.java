@@ -113,6 +113,7 @@ class ImageApprovalService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public JobView change(long actor, UUID submission, long id, boolean retry) {
         access.lockCurrent(actor);
+        if (retry && !enabled) throw SubmissionErrors.error(503,"이미지 승인 작업이 비활성화되어 있습니다.");
         var head = locked(submission);
         var job = jobs.latest(head.id(),true).filter(row -> row.id()==id).orElseThrow(SubmissionErrors::missing);
         verifyHead(head,job.expectedVersion(),job.revision());

@@ -1,6 +1,7 @@
 "use client";
 
 // 검색 입력·필터·페이지 버튼에 브라우저 이벤트와 useState가 필요해 이 경로를 Client Component로 둔다.
+import Link from "next/link";
 import {useQuery} from "@tanstack/react-query";
 import {getSakeList} from "@/app/api/sake";
 import SakeCard from "@/components/sake/SakeCard";
@@ -96,11 +97,10 @@ export default function SakePage(){
                             사케 목록
                         </h2>
 
-                        {data && (
-                            <p className={"shrink-0 text-sm tabular-nums text-stone-500"}>
-                                총 {data.count.toLocaleString()}개
-                            </p>
-                        )}
+                        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm">
+                            {data && <p className="tabular-nums text-stone-500">총 {data.count.toLocaleString()}개</p>}
+                            <Link href="/account/submissions/new" className="underline underline-offset-4">사케 제보하기</Link>
+                        </div>
                     </div>
 
                     {/* 최초 로딩과 재조회는 다르다. 직전 데이터가 없을 때만 스켈레톤을 보여준다. */}

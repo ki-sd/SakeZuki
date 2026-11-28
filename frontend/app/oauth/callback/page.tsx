@@ -4,15 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
-import { completeOAuth, errorMessage, finishDestination } from "@/app/api/auth";
+import { authStore, completeOAuth, errorMessage, finishDestination } from "@/app/api/auth";
 
 export default function OAuthCallback() {
     const router = useRouter();
     const [error, setError] = useState("");
     useEffect(() => {
         let active = true;
-        completeOAuth().then(() => { if (active) router.replace(finishDestination()); })
-            .catch(error => { if (active) setError(errorMessage(error)); });
+        const operation = completeOAuth();
+        const generation = authStore.snapshot().generation;
+        const valid = () => active && generation === authStore.snapshot().generation;
+        operation.then(() => { if (valid()) router.replace(finishDestination()); })
+            .catch(error => { if (valid()) setError(errorMessage(error)); });
         return () => { active = false; };
     }, [router]);
     return <><Header /><main id="main-content" className="page-shell py-16"><div className="ui-state" role="status">

@@ -18,6 +18,9 @@ class SubmissionRepository {
 
     record Submission(String id, String status, long version, int revision, LocalDateTime createdAt,
                       LocalDateTime updatedAt, String hash) {}
+    record Summary(String id, String status, long version, int currentRevision,
+                   LocalDateTime createdAt, LocalDateTime updatedAt, boolean approvalInProgress,
+                   Long sakeNo, String nameJa, String nameKo) {}
     record Revision(int number, Integer parent, int schemaVersion, String kind, String payload,
                     String attachment, LocalDateTime createdAt) {}
     record Event(int revision, String actorRole, String previous, String next, String reason, LocalDateTime createdAt) {}
@@ -41,11 +44,35 @@ class SubmissionRepository {
                 .query(SubmissionRepository::submission).optional();
     }
 
-    List<Submission> list(long owner, int offset, int limit) {
-        return sql.sql("""
-                SELECT * FROM CATALOG_SUBMISSION WHERE owner_no=?
-                ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
-                """).params(owner, limit, offset).query(SubmissionRepository::submission).list();
+    private static final String SUMMARY_SQL = """
+            SELECT s.*, j.id IS NOT NULL AS approval_in_progress, a.sake_no,
+                   CASE WHEN JSON_TYPE(JSON_EXTRACT(r.payload,'$.sake.ja'))='STRING'
+                       THEN JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.ja')) END AS name_ja,
+                   CASE WHEN JSON_TYPE(JSON_EXTRACT(r.payload,'$.sake.ko'))='STRING'
+                       THEN JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.ko')) END AS name_ko
+            FROM CATALOG_SUBMISSION s
+            LEFT JOIN SUBMISSION_REVISION r ON r.submission_id=s.id AND r.revision_no=s.current_revision_no
+            LEFT JOIN SUBMISSION_IMAGE_APPROVAL_JOB j ON j.active_submission=s.id
+            LEFT JOIN SUBMISSION_APPROVAL a ON a.submission_id=s.id AND s.status='APPROVED'
+            WHERE s.owner_no=?
+            """;
+
+    Optional<Summary> summary(long owner, UUID id) {
+        return sql.sql(SUMMARY_SQL+" AND s.id=?").params(owner,id.toString())
+                .query(SubmissionRepository::summary).optional();
+    }
+
+    List<Summary> list(long owner, int offset, int limit) {
+        return sql.sql(SUMMARY_SQL+" ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?")
+                .params(owner,limit,offset).query(SubmissionRepository::summary).list();
+    }
+
+    private static Summary summary(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        var submission = submission(rs,row);
+        return new Summary(submission.id(),submission.status(),submission.version(),
+                submission.revision(),submission.createdAt(),submission.updatedAt(),
+                rs.getBoolean("approval_in_progress"),rs.getObject("sake_no",Long.class),
+                rs.getString("name_ja"),rs.getString("name_ko"));
     }
 
     List<Revision> revisions(long owner, String id) {
