@@ -19,9 +19,9 @@
 | GET /api/user/sake-submissions/uploads/{assetId}/preview | 유효한 미연결 첨부의 소유자 미리보기 |
 | GET /api/user/sake-submissions/{id}/attachments/{assetId} | 열린 제보의 불변 리비전에 포함된 첨부의 소유자 미리보기 |
 
-필수 이름은 sake의 ja·ko다. sake.kana는 선택이다. brewery는 기존 내부 번호 existingNo 또는 proposed의 ja·ko·선택 kana 중 하나다. brand는 생략하거나 같은 방식으로 제안하며, 기존 브랜드를 선택하면 기존 양조장에 속하는지 확인한다. 사케 이름과 양조장·브랜드 이름은 원문을 사용한다. 일본어 및 가나 500자, 한국어 1,000자까지 허용한다. designation 100자, riceJa·riceKo·yeastJa·yeastKo·variant 500자, notes 2,000자, sourceUrl과 imageRights 1,000자다. 공백만 있는 문자열, 제어문자, 짝이 없는 서러게이트는 거부한다. HTML처럼 보이는 설명은 JSON 문자열로만 저장·반환한다. sourceUrl은 호스트가 있는 HTTP(S) 증거 참조이며 서버가 요청하지 않는다.
+필수 이름은 sake의 ja·ko다. sake.kana는 선택이다. brewery는 기존 내부 번호 existingNo 또는 proposed의 ja·ko·선택 kana 중 하나다. brand는 생략하거나 같은 방식으로 제안하며, 기존 브랜드를 선택하면 기존 양조장에 속하는지 확인한다. 사케 이름과 양조장·브랜드 이름은 원문을 사용한다. 일본어 및 가나 500자, 한국어 1,000자까지 허용한다. designation 100자, riceJa·riceKo·yeastJa·yeastKo·variant 500자, notes 2,000자, sourceUrl과 imageRights 1,000자다. notes와 imageRights는 LF와 CRLF를 허용하며 저장과 멱등성 해시 계산 전에 CRLF를 LF로 통일한다. 다른 필드는 한 줄이다. 공백과 개행으로만 된 값, 탭·단독 CR·NUL 등 나머지 제어문자, 짝이 없는 서러게이트는 거부한다. HTML처럼 보이는 설명은 JSON 문자열로만 저장·반환한다. sourceUrl은 호스트가 있는 HTTP(S) 증거 참조이며 서버가 요청하지 않는다.
 
-sakeMeter·acidity·polishingPercent·alcoholPercent는 최소값 min과 선택 최대값 max로 단일값과 범위를 표현한다. 최대 소수 3자리이며 니혼슈도는 -1,000~1,000, 비율과 산도는 0~100이다. 니혼슈도는 기존 지표 단위, 산도는 일본주 산도 지표, 정미율·알코올은 퍼센트, capacityMl은 1~100,000mL 정수다. 범위에서 max가 min보다 작으면 거부한다. 미확인 수치는 NULL로 기록한다. 기존 문자 시드의 범위·단위·미기재 표식을 이 계약으로 덮어쓰지 않는다. attachmentId가 있으면 imageRights와 명시적인 imageConsent가 필요하다. 이 동의는 검토 자료이며 GRANTED 권리 이벤트를 만들지 않는다.
+sakeMeter·acidity·polishingPercent·alcoholPercent는 최소값 min과 선택 최대값 max로 단일값과 범위를 표현한다. 최대 소수 3자리이며 니혼슈도는 -1,000~1,000, 비율과 산도는 0~100이다. 니혼슈도는 기존 지표 단위, 산도는 일본주 산도 지표, 정미율·알코올은 퍼센트, capacityMl은 1~100,000mL 정수다. 범위에서 max가 min보다 작으면 거부한다. 정수·수치 및 동의의 Boolean은 JSON 고유 타입을 사용한다. 숫자·Boolean 문자열, 실수 토큰의 정수 변환, 중복 키, 미등록 속성, 후행 JSON 값은 422다. UUID는 문자열이며 미확인 선택 수치는 NULL로 기록한다. 기존 문자 시드의 범위·단위·미기재 표식을 이 계약으로 덮어쓰지 않는다. attachmentId가 있으면 imageRights와 명시적인 imageConsent가 필요하다. 이 동의는 검토 자료이며 GRANTED 권리 이벤트를 만들지 않는다.
 
 401은 인증/활성 계정, 403은 권한, 404는 없거나 접근할 수 없는 대상, 409는 상태·버전·키 충돌, 413은 본문·파일 크기, 415는 지원 형식, 422는 입력·이미지 검증, 429는 쿼터, 503은 일시적 저장·처리 불가를 의미한다. 내부 SQL이나 저장소 키는 오류 응답에 포함하지 않는다.
 
@@ -35,7 +35,7 @@ V11은 CATALOG_SUBMISSION, SUBMISSION_REVISION, SUBMISSION_EVENT, SUBMISSION_ATT
 
 ## 업로드와 비공개 제공
 
-Spring multipart는 지연 파싱을 사용한다. 파일은 10MiB, multipart 전체는 11MiB다. Nginx는 정확히 업로드 경로의 POST에만 11MiB를 허용하고 기본 본문 제한은 16KiB다. Backend에서도 제보 JSON을 16KiB로 제한하며 인증 이후, multipart 읽기 전에 크기와 요청 키를 확인한다. 두 업로드 요청과 네 미리보기를 JVM에서 동시에 허용한다. Nginx 업로드 IP 제한은 분당 12회와 순간 허용 4회다. 기존 이미지 코어가 JPEG·PNG 검증, 픽셀·해상도 제한, 재인코딩·메타데이터 제거, SHA-256 및 버전형 키를 제공한다.
+Spring multipart는 지연 파싱을 사용한다. 파일은 10MiB, multipart 전체는 11MiB다. Nginx는 정확히 업로드 경로의 POST에 11m(11MiB)를 허용하며 기본 본문 제한은 16k(16KiB)다. 업로드 전체 상한은 Spring과 같고 Spring은 추가로 파일 단위 제한을 적용한다. Backend에서도 제보 JSON을 16KiB로 제한하며 인증 이후, multipart 읽기 전에 크기와 요청 키를 확인한다. JVM마다 사용자 HTTP 업로드 1건과 미리보기 4건을 동시에 허용한다. 다른 업로드가 진행 중이면 multipart 파싱·저장 의도·쿼터 예약 전에 503을 반환한다. Nginx 업로드 IP 제한은 분당 12회와 순간 허용 4회다. 파일 파트 MIME은 정확히 image/jpeg 또는 image/png를 받는다. IMAGE/PNG 및 image/png; charset=utf-8은 현재 415다. 기존 이미지 코어가 JPEG·PNG 검증, 픽셀·해상도 제한, 재인코딩·메타데이터 제거, SHA-256 및 버전형 키를 제공한다.
 
 업로드 의도와 쿼터를 먼저 커밋한다. 그 뒤 트랜잭션 없이 동일 UUID로 ImageAssetService.stage를 호출한다. 조건부 PUT과 실제 GET 후 V10 VERIFIED, V11 READY를 순서대로 기록한다. 5분 의도 임대 중 중복 작업은 409다. 타임아웃 뒤 다른 세대가 실행될 수 있고, 이전 세대의 늦은 완료는 READY를 덮어쓰지 않는다. PUT 뒤 DB 반영 실패는 같은 회원·키·입력으로 재시도하며 기존 객체를 검증한다. 확정 손상은 V10의 명시적 복구 절차를 따른다. 만료·취소는 물리 삭제로 이어지지 않는다.
 
@@ -62,4 +62,4 @@ Spring multipart는 지연 파싱을 사용한다. 파일은 10MiB, multipart �
 
 로컬 검증 코드 f68a51b584dcbd349b10b4c13c85df67026e2db2에서 JVM 176개를 실행했다. 공통 11, Tools 기본 69·MySQL 17, Backend 기본 28·MySQL 51에서 실패·오류·스킵은 0개였다. Tools Wrapper의 :image-core:cleanTest cleanTest test, python3 scripts/test_auth_integration.py --e2e의 서버 단계, Backend Wrapper bootJar를 실행했다. V1–V11 초기화, V10 업그레이드, MySQL 1205 재시도, 소유권·상태·입력·동시 쿼터, JPEG/PNG·만료·권리 철회·저장 손상, PUT 뒤 DB 반영 실패 및 동일 첨부 재시도를 확인했다. 최종 Chromium 및 Docker 결과는 PR의 검사와 증거를 참조한다.
 
-독립 QA는 10/11MiB 경계, 잠금과 다중 세대 재처리, 불변 리비전과 교차 회원 접근, 미리보기 읽기 도중 권리나 계정이 바뀌는 경우를 집중 검토한다. 실제 R2 및 운영 환경은 미검증이다.
+초기 독립 QA의 결과와 후속 수정 증거는 [PR #16 QA 후속](UGC-01_QA_PR16.md)을 참조한다. 실제 R2 및 운영 환경은 미검증이다.
