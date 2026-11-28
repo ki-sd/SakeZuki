@@ -37,3 +37,9 @@ Nginx와 Spring의 전체 multipart 상한은 모두 11MiB다. 독립 보고서�
 | Backend Wrapper bootJar | 성공 |
 
 JVM 184개가 실패·오류·스킵 없이 통과했다. 추가 HTTP 8건은 같은·다른 회원 경합의 무예약·무저장소 호출, 파싱·입력·저장 실패 후 슬롯 재사용, 생성·보완·취소의 중복 키, 숫자·동의 타입, 설명 저장·응답·영수증, Content-Length·chunked 크기 경계를 검증한다. 기존 PUT 후 DB 실패 복구, 비공개 미리보기 재검사, 동시 보완·취소, V1–V11 초기화 및 V10 업그레이드도 통과했다. PR #13 카탈로그 경합 45건의 첫 시도와 실제 MySQL 1205 재시도를 확인했다. 최종 Chromium 및 원격 CI는 PR 검사 기록을 참조한다.
+
+## 최종 독립 QA와 병합
+
+사용자가 제공한 재검증 대상은 acdf394c79ecc4fb9a62b91c1890b749c2d64034이며 판정은 PASS였다. JVM 184/184, 실패·오류·스킵 0건이었다. P2-1, P2-2, P3-2, P3-4의 독립 프로브는 각각 36/36, 31/31, 38/38, 35/35였으며 새 P0·P1·P2는 0건이었다. 특정 chunked 요청의 multipart 전체 11MiB+1 경계에서 Tomcat이 마지막 개행을 읽지 않아 추가 파트 검증의 422가 반환된 사례도 기록됐다. 저장이나 자원 제한 우회는 관찰되지 않았다. 초과 요청이 항상 413을 반환하는 것으로 해석하지 않는다.
+
+별도 원격 Actions run 46111430387은 같은 HEAD에서 프런트엔드 단위 16개, Chromium 11개 및 Linux Docker HTTP/HTTPS를 포함한 전체 검증을 통과했다. PR #16은 63a8d1de1bd82403953efb5fb88eada58f5cf303에서 main에 병합됐다. [PR #16](https://github.com/ki-sd/SakeZuki/pull/16) · [원격 CI](https://github.com/ki-sd/SakeZuki/actions/runs/46111430387)

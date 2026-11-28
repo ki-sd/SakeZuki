@@ -35,7 +35,7 @@ V11은 CATALOG_SUBMISSION, SUBMISSION_REVISION, SUBMISSION_EVENT, SUBMISSION_ATT
 
 ## 업로드와 비공개 제공
 
-Spring multipart는 지연 파싱을 사용한다. 파일은 10MiB, multipart 전체는 11MiB다. Nginx는 정확히 업로드 경로의 POST에 11m(11MiB)를 허용하며 기본 본문 제한은 16k(16KiB)다. 업로드 전체 상한은 Spring과 같고 Spring은 추가로 파일 단위 제한을 적용한다. Backend에서도 제보 JSON을 16KiB로 제한하며 인증 이후, multipart 읽기 전에 크기와 요청 키를 확인한다. JVM마다 사용자 HTTP 업로드 1건과 미리보기 4건을 동시에 허용한다. 다른 업로드가 진행 중이면 multipart 파싱·저장 의도·쿼터 예약 전에 503을 반환한다. Nginx 업로드 IP 제한은 분당 12회와 순간 허용 4회다. 파일 파트 MIME은 정확히 image/jpeg 또는 image/png를 받는다. IMAGE/PNG 및 image/png; charset=utf-8은 현재 415다. 기존 이미지 코어가 JPEG·PNG 검증, 픽셀·해상도 제한, 재인코딩·메타데이터 제거, SHA-256 및 버전형 키를 제공한다.
+Spring multipart는 지연 파싱을 사용한다. 파일은 10MiB, multipart 전체는 11MiB다. Nginx는 정확히 업로드 경로의 POST에 11m(11MiB)를 허용하며 기본 본문 제한은 16k(16KiB)다. 업로드 전체 상한은 Spring과 같고 Spring은 추가로 파일 단위 제한을 적용한다. Backend에서도 제보 JSON을 16KiB로 제한하며 인증 이후, multipart 읽기 전에 크기와 요청 키를 확인한다. JVM마다 사용자 HTTP 업로드 1건과 UGC-02A에서 관리자와 공유하는 비공개 미리보기 2건을 동시에 허용한다. 다른 업로드가 진행 중이면 multipart 파싱·저장 의도·쿼터 예약 전에 503을 반환한다. Nginx 업로드 IP 제한은 분당 12회와 순간 허용 4회다. 파일 파트 MIME은 정확히 image/jpeg 또는 image/png를 받는다. IMAGE/PNG 및 image/png; charset=utf-8은 현재 415다. 기존 이미지 코어가 JPEG·PNG 검증, 픽셀·해상도 제한, 재인코딩·메타데이터 제거, SHA-256 및 버전형 키를 제공한다.
 
 업로드 의도와 쿼터를 먼저 커밋한다. 그 뒤 트랜잭션 없이 동일 UUID로 ImageAssetService.stage를 호출한다. 조건부 PUT과 실제 GET 후 V10 VERIFIED, V11 READY를 순서대로 기록한다. 5분 의도 임대 중 중복 작업은 409다. 타임아웃 뒤 다른 세대가 실행될 수 있고, 이전 세대의 늦은 완료는 READY를 덮어쓰지 않는다. PUT 뒤 DB 반영 실패는 같은 회원·키·입력으로 재시도하며 기존 객체를 검증한다. 확정 손상은 V10의 명시적 복구 절차를 따른다. 만료·취소는 물리 삭제로 이어지지 않는다.
 
