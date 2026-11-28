@@ -108,13 +108,13 @@ class SubmissionService {
                 page, size);
     }
 
-    private String payload(SubmissionInput data) {
+    String payload(SubmissionInput data) {
         if (data == null) throw SubmissionInput.invalid("data");
         data.validate();
         return json.writeValueAsString(data);
     }
 
-    private void validateReferences(SubmissionInput data) {
+    void validateReferences(SubmissionInput data) {
         Long brewery = data.brewery().existingNo();
         if (brewery != null && !submissions.breweryExists(brewery)) throw SubmissionInput.invalid("brewery.existingNo");
         if (data.brand() != null && data.brand().existingNo() != null
@@ -142,12 +142,12 @@ class SubmissionService {
         return "PENDING".equals(status) || "NEEDS_REVISION".equals(status);
     }
 
-    private static int offset(int page, int size) {
+    static int offset(int page, int size) {
         if (page < 0 || page > 10_000 || size < 1 || size > 50) throw SubmissionInput.invalid("page/size");
         return page * size;
     }
 
-    private static <T> Page<T> page(List<T> rows, int page, int size) {
+    static <T> Page<T> page(List<T> rows, int page, int size) {
         return new Page<>(rows.subList(0, Math.min(size, rows.size())), page, size, rows.size() > size);
     }
 

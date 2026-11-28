@@ -95,10 +95,14 @@ class SubmissionRepository {
     }
 
     void revision(long owner, String id, int number, Integer parent, String kind, String json, UUID attachment) {
+        revision(owner, "MEMBER", id, number, parent, kind, json, attachment);
+    }
+
+    void revision(long author, String role, String id, int number, Integer parent, String kind, String json, UUID attachment) {
         sql.sql("""
                 INSERT INTO SUBMISSION_REVISION(submission_id,revision_no,parent_revision_no,author_no,
-                    author_role,revision_kind,payload,attachment_id) VALUES (?,?,?,?,'MEMBER',?,?,?)
-                """).params(id, number, parent, owner, kind, json, attachment == null ? null : attachment.toString()).update();
+                    author_role,revision_kind,payload,attachment_id) VALUES (?,?,?,?,?,?,?,?)
+                """).params(id, number, parent, author, role, kind, json, attachment == null ? null : attachment.toString()).update();
     }
 
     void initialize(String id, long owner) {
@@ -116,10 +120,14 @@ class SubmissionRepository {
     }
 
     void event(String id, int revision, long owner, String from, String to, String reason) {
+        event(id, revision, owner, "MEMBER", from, to, reason);
+    }
+
+    void event(String id, int revision, long actor, String role, String from, String to, String reason) {
         sql.sql("""
                 INSERT INTO SUBMISSION_EVENT(submission_id,revision_no,actor_no,actor_role,
-                   previous_status,next_status,reason) VALUES (?,?,?,'MEMBER',?,?,?)
-                """).params(id, revision, owner, from, to, reason).update();
+                   previous_status,next_status,reason) VALUES (?,?,?,?,?,?,?)
+                """).params(id, revision, actor, role, from, to, reason).update();
     }
 
     boolean breweryExists(long no) {
