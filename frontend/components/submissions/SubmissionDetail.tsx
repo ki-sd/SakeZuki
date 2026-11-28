@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cancelSubmission, conflict, getSubmission, reviseSubmission, submissionError,
     type Choice, type Revision, type SubmissionInput } from "@/app/api/submissions";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { useAuth, useSessionGuard } from "@/components/auth/AuthProvider";
 import SubmissionForm, { rangeFields, textFields } from "./SubmissionForm";
 import PrivatePreview from "./PrivatePreview";
-import { statusLabels, submissionDate } from "./SubmissionShell";
+import { statusLabels } from "./SubmissionShell";
+import { submissionDate } from "@/commons/submission-date";
 
 function choiceLabel(choice?: Choice | null) {
     if (!choice) return "없음";
@@ -44,6 +45,7 @@ function RevisionContent({ revision, id, historical = false }: { revision: Revis
 const revisionLabels: Record<string,string> = { INITIAL: "최초 제보", MEMBER_REVISION: "사용자 보완", ADMIN_REVISION: "관리자 검토 수정" };
 
 export default function SubmissionDetail({ id }: { id: string }) {
+    const guard = useSessionGuard();
     const { member } = useAuth();
     const cache = useQueryClient();
     const query = useQuery({ queryKey: ["my-submission", member?.memberNo, id],
@@ -68,13 +70,16 @@ export default function SubmissionDetail({ id }: { id: string }) {
     const cancellable = open && !submission.approvalInProgress;
 
     async function resubmit(data: SubmissionInput) {
+        const valid = guard();
         setNotice("");
         try {
             await reviseSubmission(id,submission.version,data);
+            if (!valid()) return;
             setEditing(false);
             setNotice("보완 제보를 제출했습니다.");
             await update();
         } catch (error) {
+            if (!valid()) return;
             if (!conflict(error)) throw error;
             setNotice("제보 상태가 바뀌었습니다. 최신 내용을 확인해 주세요.");
             await update();
@@ -86,14 +91,17 @@ export default function SubmissionDetail({ id }: { id: string }) {
         if (cancelling.current) return;
         cancelling.current = true;
         setBusy(true);
+        const valid = guard();
         setNotice("");
         try {
             const reason = String(new FormData(event.currentTarget).get("reason") ?? "").trim();
             await cancelSubmission(id,submission.version,reason || null);
+            if (!valid()) return;
             setConfirm(false);
             setNotice("제보를 취소했습니다.");
             await update();
         } catch (error) {
+            if (!valid()) return;
             if (conflict(error)) {
                 setConfirm(false);
                 setNotice("제보 상태가 바뀌었습니다. 최신 내용을 확인해 주세요.");
@@ -101,7 +109,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
             } else setNotice(submissionError(error));
         } finally {
             cancelling.current = false;
-            setBusy(false);
+            if (valid()) setBusy(false);
         }
     }
 

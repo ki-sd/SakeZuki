@@ -1,6 +1,6 @@
 import axios from "axios";
 import api from "./axios";
-import { authStore } from "./auth";
+import { captureSession, requireSession } from "./auth";
 import { FoodRecommendRequest, FoodRecommendResponse, SakeRecommendRequest, SakeRecommendResponse } from "@/types/recommend";
 
 // 결과를 받지 못한 요청 키는 탭 새로고침 뒤에도 재사용한다. 원문 입력·토큰은 저장하지 않는다.
@@ -11,23 +11,30 @@ async function storageSlot(kind: string, input: FoodRecommendRequest | SakeRecom
     return "sakezuki-request:" + member + ":" + kind + ":" + hash;
 }
 export async function hasPendingRecommendation(kind: string, input: FoodRecommendRequest | SakeRecommendRequest) {
-    return sessionStorage.getItem(await storageSlot(kind, input, authStore.snapshot().member?.memberNo)) !== null;
+    const session = captureSession();
+    const slot = await storageSlot(kind,input,session.memberNo ?? undefined);
+    requireSession(session);
+    return sessionStorage.getItem(slot) !== null;
 }
 function paid<T>(kind: string, input: FoodRecommendRequest | SakeRecommendRequest): Promise<T> {
-    const member = authStore.snapshot().member?.memberNo;
-    const identity = member + ":" + kind + ":" + JSON.stringify(input);
+    const session = captureSession();
+    const member = session.memberNo ?? undefined;
+    const identity = session.generation + ":" + member + ":" + kind + ":" + JSON.stringify(input);
     const existing = pending.get(identity);
     if (existing) return existing as Promise<T>;
     const operation = (async () => {
         // 비동기 해시 계산 전에 in-flight 요청을 등록해 빠른 캐시 응답에서도 더블클릭을 합친다.
         const slot = await storageSlot(kind, input, member);
+        requireSession(session);
         const key = sessionStorage.getItem(slot) ?? crypto.randomUUID();
         sessionStorage.setItem(slot, key);
         try {
             const response = await api.post<T>("/recommend/" + kind, input, { timeout: 120000, headers: { "Idempotency-Key": key } });
+            requireSession(session);
             sessionStorage.removeItem(slot);
             return response.data;
         } catch (error) {
+            requireSession(session);
             // 응답 유실·처리 중·서버 오류는 확정 여부가 불명확해 같은 키로 확인한다.
             if (axios.isAxiosError(error) && error.response && [400, 401, 402, 403, 410].includes(error.response.status))
                 sessionStorage.removeItem(slot);

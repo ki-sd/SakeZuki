@@ -3,8 +3,7 @@
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {useState} from "react";
-import {useQueryClient} from "@tanstack/react-query";
-import {useAuth} from "@/components/auth/AuthProvider";
+import {useAuth, useSessionGuard} from "@/components/auth/AuthProvider";
 import {errorMessage, logout} from "@/app/api/auth";
 
 export default function Header (){
@@ -12,14 +11,16 @@ export default function Header (){
     // 이 값과 링크의 강조가 이동 직후 다시 렌더링되어야 하므로 Client Component다.
     const pathname=usePathname();
     const {status, member}=useAuth();
-    const queryClient=useQueryClient();
+    const guard = useSessionGuard();
     const [busy,setBusy]=useState(false);
     const [error,setError]=useState("");
     async function signOut() {
         setBusy(true); setError("");
-        try { await logout(); queryClient.clear(); }
-        catch(error) { setError(errorMessage(error)); }
-        finally { setBusy(false); }
+        const operation = logout();
+        const valid = guard();
+        try { await operation; }
+        catch(error) { if (valid()) setError("서버 로그아웃을 확인하지 못했습니다. " + errorMessage(error)); }
+        finally { if (valid()) setBusy(false); }
     }
     return (
         <header className={"border-b border-stone-200 bg-white"}>

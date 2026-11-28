@@ -56,8 +56,8 @@ class AdminReviewRepository {
             """;
     private static final String JOB_JOIN = """
             LEFT JOIN SUBMISSION_IMAGE_APPROVAL_JOB j ON j.id=(
-                SELECT recent.id FROM SUBMISSION_IMAGE_APPROVAL_JOB recent
-                WHERE recent.submission_id=s.id ORDER BY recent.id DESC LIMIT 1)
+                SELECT MAX(recent.id) FROM SUBMISSION_IMAGE_APPROVAL_JOB recent
+                WHERE recent.submission_id=s.id)
             """;
     record Revision(int number, Integer parent, long author, String role, int schema, String kind,
                     String payload, String attachmentId, String attachmentStatus, String stagingState,
@@ -71,19 +71,19 @@ class AdminReviewRepository {
     record Source(long sakeNo, String system, String externalKey) {}
 
     List<Head> list(Status status, Sort sort, String query, int offset, int limit) {
-        String statement = """
+        String order = " ORDER BY s." + (sort == Sort.CREATED ? "created_at" : "updated_at") + " DESC, s.id DESC";
+        String page = """
                 SELECT s.id,s.owner_no,s.status,s.version,s.current_revision_no,s.created_at,s.updated_at,
-                       %1$s AS name_ja, %2$s AS name_ko, %3$s
+                       %1$s AS name_ja, %2$s AS name_ko
                 FROM CATALOG_SUBMISSION s
                 JOIN SUBMISSION_REVISION r ON r.submission_id=s.id AND r.revision_no=s.current_revision_no
-                %4$s
                 WHERE 1=1
-                """.formatted(jsonName("ja"), jsonName("ko"),JOB_FIELDS,JOB_JOIN) + (status == null ? "" : " AND s.status=:status\n")
+                """.formatted(jsonName("ja"),jsonName("ko")) + (status == null ? "" : " AND s.status=:status\n")
                 + (query == null || query.isEmpty() ? "" : """
                     AND (%s LIKE :search ESCAPE '!' OR %s LIKE :search ESCAPE '!' OR %s LIKE :search ESCAPE '!')
-                    """.formatted(jsonName("ja"), jsonName("ko"), jsonName("kana")))
-                + " ORDER BY s." + (sort == Sort.CREATED ? "created_at" : "updated_at")
-                + " DESC, s.id DESC LIMIT :limit OFFSET :offset";
+                    """.formatted(jsonName("ja"),jsonName("ko"),jsonName("kana")))
+                + order + " LIMIT :limit OFFSET :offset";
+        String statement = "SELECT s.*, " + JOB_FIELDS + " FROM (" + page + ") s " + JOB_JOIN + order;
         var params = sql.sql(statement).param("limit", limit).param("offset", offset);
         if (status != null) params.param("status", status.name());
         if (query != null && !query.isEmpty()) params.param("search", "%" + escapeLike(query) + "%");

@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useSessionGuard } from "./AuthProvider";
 import Header from "@/components/layout/Header";
 import { errorMessage, login, safeReturnTo } from "@/app/api/auth";
 
 export default function LoginForm({ returnTo, oauthError }: { returnTo: string | null; oauthError: boolean }) {
+    const guard = useSessionGuard();
     const router = useRouter();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(oauthError ? "Google 로그인이 취소되었거나 실패했습니다. 다시 시도해 주세요." : "");
@@ -15,11 +17,13 @@ export default function LoginForm({ returnTo, oauthError }: { returnTo: string |
         if (busy) return;
         const data = new FormData(event.currentTarget);
         setBusy(true); setError("");
+        const operation = login(String(data.get("email")).trim(), String(data.get("password")));
+        const valid = guard();
         try {
-            await login(String(data.get("email")).trim(), String(data.get("password")));
-            router.replace(safeReturnTo(returnTo));
-        } catch (error) { setError(errorMessage(error)); }
-        finally { setBusy(false); }
+            await operation;
+            if (valid()) router.replace(safeReturnTo(returnTo));
+        } catch (error) { if (valid()) setError(errorMessage(error)); }
+        finally { if (valid()) setBusy(false); }
     }
     function google() {
         sessionStorage.setItem("authReturnTo", safeReturnTo(returnTo));

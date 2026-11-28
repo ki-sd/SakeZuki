@@ -35,6 +35,7 @@ def main():
                AUTH_TEST_JDBC_URL="jdbc:mysql://127.0.0.1:3308/sakezuki_auth_it?serverTimezone=UTC&characterEncoding=UTF-8")
     env.update(AUTH_TEST_LOGIN_EMAIL=secrets.token_hex(12) + "@example.invalid", AUTH_TEST_LOGIN_PASSWORD=secrets.token_urlsafe(24),
                AUTH_TEST_BASE_URL="http://localhost:3001", BACKEND_ORIGIN="http://127.0.0.1:8081", AUTH_TEST_DIST_DIR=".next-auth-e2e")
+    env.update(AUTH_TEST_SECOND_EMAIL=secrets.token_hex(12) + "@example.invalid", AUTH_TEST_SECOND_PASSWORD=secrets.token_urlsafe(24))
     # 일반 기동 테스트도 같은 분리 DB만 사용한다. 기존 .env를 테스트 설정으로 가져오지 않는다.
     env.update(SPRING_CONFIG_IMPORT="", MYSQL_HOST="127.0.0.1", MYSQL_PORT="3308", MYSQL_DATABASE="sakezuki_auth_it",
                MYSQL_USER=env["AUTH_TEST_DB_USER"], MYSQL_PASSWORD=env["AUTH_TEST_DB_PASSWORD"], JWT_SECRET=base64.b64encode(secrets.token_bytes(32)).decode("ascii"),
@@ -99,7 +100,23 @@ def main():
         frontend = start([npm, "run", "dev", "--", "--port", "3001"], ROOT / "frontend", "auth-e2e-frontend.log")
         wait_http("http://localhost:3001/login", frontend)
         tsconfig_generated = tsconfig.read_bytes()
-        return subprocess.run([npm, "run", "test:e2e"], cwd=ROOT / "frontend", env=env).returncode
+        result = subprocess.run([npm, "run", "test:e2e"], cwd=ROOT / "frontend", env=env)
+        if result.returncode:
+            return result.returncode
+        # The second fixture only receives a fresh login. A stale write must not affect its rows or quota.
+        counts = subprocess.run(compose + ["exec", "-T", "mysql-auth-test", "sh", "-c",
+                                'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root -N -B sakezuki_auth_it'],
+                                env=env, cwd=ROOT, capture_output=True, text=True, check=True, input=f"""
+            SELECT (SELECT COUNT(*) FROM CATALOG_SUBMISSION WHERE owner_no=m.no),
+                   (SELECT COUNT(*) FROM SUBMISSION_ATTACHMENT WHERE owner_no=m.no),
+                   (SELECT COALESCE(SUM(reserved_bytes),0) FROM SUBMISSION_ATTACHMENT WHERE owner_no=m.no),
+                   (SELECT balance FROM CREDIT_ACCOUNT WHERE member_no=m.no)
+            FROM MEMBER m WHERE m.email='{env["AUTH_TEST_SECOND_EMAIL"]}';
+            """)
+        if counts.stdout.strip().split() != ["0","0","0","10"]:
+            raise RuntimeError("Cross-session fixture data changed")
+        print("Cross-session fixture: submissions=0, attachments=0, reserved_bytes=0, unchanged_credit=10", flush=True)
+        return 0
     finally:
         for child in reversed(children):
             if child.poll() is None:

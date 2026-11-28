@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/Header";
 import PairingResult, { ProductFacts } from "@/components/recommend/PairingResult";
 import SakeImage from "@/components/sake/SakeImage";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { useAuth, useSessionGuard } from "@/components/auth/AuthProvider";
 import { errorMessage } from "@/app/api/auth";
 import { getAccount, type History } from "@/app/api/account";
 import { prepareRecommendation, requestNewRecommendation } from "@/app/api/recommendation-flow";
@@ -16,9 +16,11 @@ import { snapshotView, type RecommendationInput, type Snapshot } from "@/types/p
 import type { SakeSearchItem } from "@/types/sake";
 
 export default function RecommendPage() {
-    return <Suspense fallback={<><Header /><main id="main-content" className="page-shell py-10"><p role="status">추천 화면을 불러오는 중…</p></main></>}><RecommendContent /></Suspense>;
+    const { generation } = useAuth();
+    return <Suspense fallback={<><Header /><main id="main-content" className="page-shell py-10"><p role="status">추천 화면을 불러오는 중…</p></main></>}><RecommendContent key={generation} /></Suspense>;
 }
 function RecommendContent() {
+    const guard = useSessionGuard();
     const params = useSearchParams(); const auth = useAuth(); const queryClient = useQueryClient();
     const initialNo = Number(params.get("sakeNo"));
     const validNo = Number.isSafeInteger(initialNo) && initialNo > 0;
@@ -47,18 +49,25 @@ function RecommendContent() {
         if (busyRef.current || !allowed) return;
         busyRef.current = true; setBusy(true); setError(""); setCompleted(null); setDuplicate(null);
         const owner = auth.member?.memberNo;
+        const valid = guard();
         try {
-            if (confirmed) setCompleted({ owner, result: await requestNewRecommendation(input) });
-            else {
+            if (confirmed) {
+                const result = await requestNewRecommendation(input);
+                if (valid()) setCompleted({ owner, result });
+            } else {
                 const decision = await prepareRecommendation(input);
-                if (decision.type === "duplicate") setDuplicate({ ...decision, owner });
-                else setCompleted({ owner, result: decision.result });
+                if (valid()) {
+                    if (decision.type === "duplicate") setDuplicate({ ...decision, owner });
+                    else setCompleted({ owner, result: decision.result });
+                }
             }
-        } catch (error) { setError(errorMessage(error)); }
+        } catch (error) { if (valid()) setError(errorMessage(error)); }
         finally {
-            busyRef.current = false; setBusy(false);
-            await queryClient.invalidateQueries({ queryKey: ["account", owner] });
-            await queryClient.invalidateQueries({ queryKey: ["history", owner] });
+            if (valid()) {
+                busyRef.current = false; setBusy(false);
+                void queryClient.invalidateQueries({ queryKey: ["account", owner] });
+                void queryClient.invalidateQueries({ queryKey: ["history", owner] });
+            }
         }
     }
     function submit(event: React.FormEvent<HTMLFormElement>) {

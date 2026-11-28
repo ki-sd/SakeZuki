@@ -68,6 +68,14 @@ public class AuthE2eServer {
                 INSERT INTO SUBMISSION_EVENT(submission_id,revision_no,actor_no,actor_role,previous_status,next_status,reason)
                 VALUES (?,1,?,'ADMIN','PENDING','NEEDS_REVISION','사케 이름을 확인해 주세요.')
                 """,submission,no);
+        String second = System.getenv("AUTH_TEST_SECOND_EMAIL");
+        db.update("INSERT INTO MEMBER(email,password,name,address1,phone) VALUES(?,?,?,?,?)", second,
+                context.getBean(PasswordEncoder.class).encode(System.getenv("AUTH_TEST_SECOND_PASSWORD")),
+                "E2E second member","Test address","e2e-"+java.util.UUID.randomUUID().toString().substring(0,12));
+        Long secondNo = db.queryForObject("SELECT no FROM MEMBER WHERE email=?",Long.class,second);
+        db.update("INSERT INTO MEMBER_AUTHORITY(member_no,authority) VALUES(?,'ROLE_USER')",secondNo);
+        db.update("INSERT INTO MEMBER_VERIFICATION VALUES(?,'e2e','e2e-second',?,?,TRUE)",secondNo,now,now);
+        db.update("INSERT INTO CREDIT_ACCOUNT VALUES(?,10)",secondNo);
         System.out.println("AUTH_E2E_FOOD="+food);
         System.out.println("AUTH_E2E_READY");
     }

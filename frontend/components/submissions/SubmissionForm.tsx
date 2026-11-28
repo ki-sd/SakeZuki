@@ -1,8 +1,10 @@
 "use client";
 
+import { useSessionGuard } from "@/components/auth/AuthProvider";
 import { useRef, useState, type FormEvent } from "react";
 import { submissionError, uploadImage, type Choice, type Names, type Range, type RangeKey, type Revision,
     type SubmissionInput, type Upload } from "@/app/api/submissions";
+import { parseSubmissionDate } from "@/commons/submission-date";
 import CatalogChoice, { blankNames, NameInputs } from "./CatalogChoice";
 import PrivatePreview from "./PrivatePreview";
 
@@ -38,6 +40,7 @@ function readRange(form: FormData, key: RangeKey, title: string): Range | null {
 export default function SubmissionForm({ initial, submissionId, onSave }: {
     initial?: Revision; submissionId?: string; onSave: (data: SubmissionInput) => Promise<void>;
 }) {
+    const guard = useSessionGuard();
     const [sake, setSake] = useState<Names>(initial?.data.sake ?? blankNames);
     const [brewery, setBrewery] = useState<Choice | null>(initial?.data.brewery ?? null);
     const [brand, setBrand] = useState<Choice | null>(initial?.data.brand ?? null);
@@ -50,6 +53,7 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
     const [error, setError] = useState("");
     const pending = useRef(false);
     const uploadKey = useRef<string | null>(null);
+    const details = useRef<HTMLDetailsElement>(null);
     const fileInput = useRef<HTMLInputElement>(null);
 
     function replaceFile(next: File | null) {
@@ -67,11 +71,13 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
 
     async function uploadSelected() {
         if (!file || !uploadKey.current || pending.current) return;
+        const valid = guard();
         pending.current = true;
         setBusy("upload");
         setError("");
         try {
             const result = await uploadImage(file, uploadKey.current);
+            if (!valid()) return;
             setAttachment(result.attachmentId);
             setUpload(result);
             setImageRights("");
@@ -79,10 +85,10 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
             setFile(null);
             if (fileInput.current) fileInput.current.value = "";
         } catch (failure) {
-            setError(submissionError(failure));
+            if (valid()) setError(submissionError(failure));
         } finally {
             pending.current = false;
-            setBusy(null);
+            if (valid()) setBusy(null);
         }
     }
 
@@ -94,7 +100,11 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
         if (!brewery) return setError("양조장을 선택하거나 새 양조장을 제안해 주세요.");
         if (file) return setError("선택한 파일을 먼저 업로드하거나 파일 선택을 취소해 주세요.");
         if (attachment && (!imageConsent || !imageRights.trim())) return setError("이미지 이용 동의와 권리 근거를 입력해 주세요.");
-        if (upload && Date.parse(`${upload.expiresAt}Z`) <= Date.now()) return setError("첨부 보관 기간이 끝났습니다. 이미지를 다시 업로드해 주세요.");
+        if (upload) {
+            const expiresAt = parseSubmissionDate(upload.expiresAt);
+            if (expiresAt === null || expiresAt <= Date.now())
+                return setError("첨부 보관 기간을 확인할 수 없거나 기간이 끝났습니다. 이미지를 다시 업로드해 주세요.");
+        }
         const sourceUrl = optional(values, "sourceUrl")?.trim() ?? null;
         if (sourceUrl) {
             try {
@@ -102,10 +112,22 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
                 if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error();
             } catch { return setError("출처 URL은 http 또는 https 주소로 입력해 주세요."); }
         }
+        const ranges: Partial<Record<RangeKey,Range | null>> = {};
+        for (const [key,title] of rangeFields) {
+            try {
+                ranges[key] = readRange(values,key,title);
+            } catch (failure) {
+                if (details.current) details.current.open = true;
+                const field = event.currentTarget.elements.namedItem(`${key}${optional(values,`${key}Min`) ? "Max" : "Min"}`);
+                if (field instanceof HTMLInputElement) field.focus();
+                setError(failure instanceof Error ? failure.message : "수치 범위를 확인해 주세요.");
+                return;
+            }
+        }
+        const valid = guard();
         pending.current = true;
         setBusy("save");
         try {
-            const ranges = Object.fromEntries(rangeFields.map(([key, title]) => [key, readRange(values, key, title)]));
             const text = Object.fromEntries(textFields.map(([key]) => [key, optional(values,key)]));
             const capacity = optional(values,"capacityMl");
             await onSave({ sake: normalizeNames(sake), brewery: normalizeChoice(brewery),
@@ -113,10 +135,10 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
                 capacityMl: capacity === null ? null : Number(capacity), attachmentId: attachment,
                 imageRights: attachment ? imageRights : null, imageConsent: attachment ? imageConsent : null });
         } catch (failure) {
-            setError(failure instanceof Error && failure.name === "Error" ? failure.message : submissionError(failure));
+            if (valid()) setError(failure instanceof Error && failure.name === "Error" ? failure.message : submissionError(failure));
         } finally {
             pending.current = false;
-            setBusy(null);
+            if (valid()) setBusy(null);
         }
     }
 
@@ -144,19 +166,19 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
                     <CatalogChoice key={breweryNo ?? "new-brewery"} kind="brands" breweryNo={breweryNo} value={brand} onChange={setBrand} />
                 </div>
             </section>
-            <details className="ui-panel p-5 sm:p-7" onInvalid={event => { event.currentTarget.open = true; }}>
+            <details ref={details} className="ui-panel p-5 sm:p-7" onInvalid={event => { event.currentTarget.open = true; }}>
                 <summary className="cursor-pointer text-xl font-semibold">상품 세부 정보 (선택)</summary>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    {textFields.map(([key,title,max]) => <label className="grid gap-1.5 text-sm" key={key}>{title}
-                        <input className="ui-input" name={key} maxLength={max} defaultValue={initial?.data[key] ?? ""} /></label>)}
-                    <label className="grid gap-1.5 text-sm">용량 (ml)
-                        <input className="ui-input" type="number" name="capacityMl" min={1} max={100000} step={1}
+                <div className="mt-5 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                    {textFields.map(([key,title,max]) => <label className="grid min-w-0 gap-1.5 text-sm" key={key}>{title}
+                        <input className="ui-input w-full" name={key} maxLength={max} defaultValue={initial?.data[key] ?? ""} /></label>)}
+                    <label className="grid min-w-0 gap-1.5 text-sm">용량 (ml)
+                        <input className="ui-input w-full" type="number" name="capacityMl" min={1} max={100000} step={1}
                             defaultValue={initial?.data.capacityMl ?? ""} /></label>
-                    <label className="grid gap-1.5 text-sm">출처 URL
-                        <input className="ui-input" inputMode="url" name="sourceUrl" maxLength={1000} defaultValue={initial?.data.sourceUrl ?? ""} /></label>
+                    <label className="grid min-w-0 gap-1.5 text-sm">출처 URL
+                        <input className="ui-input w-full" inputMode="url" name="sourceUrl" maxLength={1000} defaultValue={initial?.data.sourceUrl ?? ""} /></label>
                     {rangeFields.map(([key,title,min,max]) => <fieldset key={key} className="min-w-0">
                         <legend className="mb-2 text-sm">{title}</legend>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                             {(["Min", "Max"] as const).map((end,index) => <label className="grid min-w-0 gap-1 text-sm" key={end}>
                                 {index ? "최댓값" : "값 또는 최솟값"}
                                 <input className="ui-input w-full" type="number" step="0.001" min={min} max={max}
@@ -164,8 +186,8 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
                                     defaultValue={initial?.data[key]?.[index ? "max" : "min"] ?? ""} /></label>)}
                         </div>
                     </fieldset>)}
-                    <label className="grid gap-1.5 text-sm sm:col-span-2">추가 설명
-                        <textarea className="ui-input min-h-24 py-2" name="notes" maxLength={2000} defaultValue={initial?.data.notes ?? ""} /></label>
+                    <label className="grid min-w-0 gap-1.5 text-sm sm:col-span-2">추가 설명
+                        <textarea className="ui-input w-full min-h-24 py-2" name="notes" maxLength={2000} defaultValue={initial?.data.notes ?? ""} /></label>
                 </div>
             </details>
             <section className="ui-panel space-y-4 p-5 sm:p-7" aria-labelledby="image-form-title">
@@ -182,7 +204,7 @@ export default function SubmissionForm({ initial, submissionId, onSave }: {
                 {attachment && <>
                     <PrivatePreview key={attachment} attachment={attachment} submission={upload ? undefined : submissionId} />
                     <button className="ui-button-secondary" type="button" onClick={removeAttachment}>첨부 제거</button>
-                    <label className="grid gap-1.5 text-sm">이미지 권리 근거 (필수)
+                    <label className="grid min-w-0 gap-1.5 text-sm">이미지 권리 근거 (필수)
                         <textarea className="ui-input min-h-20 py-2" required maxLength={1000} value={imageRights}
                             onChange={e => setImageRights(e.target.value)} /></label>
                     <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={imageConsent}

@@ -10,10 +10,9 @@ import Header from "@/components/layout/Header";
 export const statusLabels: Record<Status, string> = {
     PENDING: "검토 대기", NEEDS_REVISION: "보완 요청", REJECTED: "반려", CANCELLED: "취소", APPROVED: "승인",
 };
-export const submissionDate = (value: string) => new Date(`${value}Z`).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
 export default function SubmissionShell({ title, children }: { title: string; children: ReactNode }) {
-    const { status, member } = useAuth();
+    const { status, member, generation } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
     useEffect(() => {
@@ -30,7 +29,7 @@ export default function SubmissionShell({ title, children }: { title: string; ch
             </div>
             {top && member && <Link className="ui-button" href={`${submissionsPath}/new`}>새 사케 제보</Link>}
         </header>
-        {status === "authenticated" && member ? <div key={member.memberNo}>{children}</div> :
+        {status === "authenticated" && member ? <div key={`${member.memberNo}:${generation}`}>{children}</div> :
             <p role="status" className="ui-state">{status === "loading" ? "로그인 상태를 확인하고 있습니다." : "로그인 페이지로 이동합니다."}</p>}
     </main></>;
 }

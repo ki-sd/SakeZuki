@@ -12,6 +12,7 @@ function setup({match=null,pending=false,error=null}={}) {
         if(name==="./recommend")return{hasPendingRecommendation:async()=>{calls.push("pending");return pending;},
             recommendSake:async input=>{calls.push(["pay-sake",input]);return{food:input.food,recommendations:[]};},
             recommendFood:async input=>{calls.push(["pay-food",input]);return{sakeNo:input.sakeNo,recommends:[]};}};
+        if(name==="./auth")return{captureSession:()=>({memberNo:1,generation:1}),requireSession(){}};
         if(name==="./account")return{matchHistory:async input=>{calls.push(["match",input]);if(error)throw error;return match;}};
         throw new Error(name);
     }});return{...exports,calls};

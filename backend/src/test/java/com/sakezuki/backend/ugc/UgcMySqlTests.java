@@ -1850,6 +1850,44 @@ class UgcMySqlTests {
     }
 
     @Test
+    void adminQueuePagesFiftyAndFiveBeforeReadingTheLatestWork() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String marker = "page-fixture-"+UUID.randomUUID();
+        var expected = new ArrayList<String>();
+        for (int i=0;i<55;i++) {
+            String id = UUID.randomUUID().toString();
+            expected.add(id);
+            db.update("""
+                    INSERT INTO CATALOG_SUBMISSION(id,owner_no,status,creation_key,payload_hash,created_at)
+                    VALUES (?,?,'PENDING',?,REPEAT('0',64),'2025-01-01 00:00:00')
+                    """,id,admin.no(),id);
+            db.update("""
+                    INSERT INTO SUBMISSION_REVISION(submission_id,revision_no,author_no,author_role,revision_kind,payload)
+                    VALUES (?,1,?,'MEMBER','INITIAL',?)
+                    """,id,admin.no(),json.writeValueAsString(Map.of("sake",Map.of("ja",marker,"ko","테스트"),"brewery",Map.of("existingNo",1))));
+            db.update("UPDATE CATALOG_SUBMISSION SET current_revision_no=1,updated_at='2025-02-01 00:00:00'+INTERVAL ? SECOND WHERE id=?",i,id);
+        }
+        for (String sort : List.of("CREATED","UPDATED")) {
+            String path = ADMIN+"?q="+marker+"&size=50&status=PENDING&sort="+sort;
+            var firstPage = node(get(admin,path));
+            var nextPage = node(get(admin,path+"&page=1"));
+            assertEquals(50,firstPage.path("items").size());
+            assertTrue(firstPage.path("hasMore").booleanValue());
+            assertEquals(5,nextPage.path("items").size());
+            assertFalse(nextPage.path("hasMore").booleanValue());
+            var actual = new ArrayList<String>();
+            for (var page : List.of(firstPage,nextPage)) {
+                for (var row : page.path("items")) {
+                    actual.add(row.path("id").asString());
+                    assertTrue(row.path("approvalJob").isNull());
+                }
+            }
+            assertEquals(sort.equals("UPDATED") ? expected.reversed() : expected.stream().sorted(Comparator.reverseOrder()).toList(),actual);
+        }
+        assertEquals(0,node(get(admin,ADMIN+"?q="+marker+"&status=REJECTED")).path("items").size());
+    }
+
+    @Test
     void readyUploadReplayDoesNotNeedTheImagePermitOrUseStorage() throws Exception {
         var owner = member("ROLE_USER");
         var key = UUID.randomUUID();

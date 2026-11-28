@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { useAuth, useSessionGuard } from "@/components/auth/AuthProvider";
 import { errorMessage } from "@/app/api/auth";
 import { getAccount, getHistory, getLedger, startVerification } from "@/app/api/account";
 
 const date = (epoch: number) => new Date(epoch * 1000).toLocaleString("ko-KR");
 const kinds: Record<string, string> = { GRANT: "최초 무료 지급", RESERVE: "추천 예약", COMMIT: "추천 완료", REFUND: "예약 복구" };
 export default function AccountPage() {
-    const { status, member } = useAuth(); const router = useRouter();
+    const { status, member } = useAuth(); const guard = useSessionGuard(); const router = useRouter();
     const [page, setPage] = useState(0); const [ledgerPage, setLedgerPage] = useState(0);
     const [consent, setConsent] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
     const enabled = status === "authenticated";
@@ -24,11 +24,14 @@ export default function AccountPage() {
     async function verify() {
         if (!account.data || !consent || busy) return;
         setBusy(true); setError("");
+        const valid = guard();
         try {
             const challenge = await startVerification(account.data);
+            if (!valid()) return;
             sessionStorage.setItem("sakezuki-verification", challenge.requestId);
             window.location.assign(challenge.redirectUrl);
-        } catch (error) { setError(errorMessage(error)); setBusy(false); }
+        } catch (error) { if (valid()) setError(errorMessage(error)); }
+        finally { setBusy(false); }
     }
     return <><Header /><main id="main-content" className="page-shell space-y-7 py-10 sm:py-14">
         <header><p className="text-sm text-stone-500">회원 정보와 나의 페어링</p><h1 className="mt-3 text-3xl font-semibold">내 계정</h1></header>

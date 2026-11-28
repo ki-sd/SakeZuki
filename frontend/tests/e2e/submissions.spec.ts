@@ -90,3 +90,99 @@ test("approval progress keeps the member status separate and hides edit actions"
     await page.getByRole("button",{ name: "상태 새로고침" }).click();
     await expect(page.getByRole("link",{ name: "공개 사케 보기" })).toHaveAttribute("href","/sake/1");
 });
+
+test("a delayed backend denial and shared cookie rotation never carry a draft across accounts", async ({ page, context }) => {
+    test.setTimeout(120000);
+    test.skip(!process.env.AUTH_TEST_SECOND_EMAIL, "Requires both isolated member fixtures");
+    const path = "/account/submissions/new";
+    const aRequest = page.waitForRequest(request => new URL(request.url()).pathname==="/api/user/catalog/breweries");
+    await loginFor(page,path);
+    const aBearer = (await aRequest).headers().authorization;
+
+    const other = await context.newPage();
+    const otherRequest = other.waitForRequest(request => new URL(request.url()).pathname==="/api/user/catalog/breweries");
+    await other.goto(path);
+    await expect(other.getByLabel("사케 한국어 이름 (필수)")).toBeVisible();
+    const otherBearer = (await otherRequest).headers().authorization;
+    expect(!!aBearer && !!otherBearer).toBe(true);
+
+    for (const [index,tab] of [page,other].entries()) {
+        await tab.getByLabel("사케 일본어 이름 (필수)").fill("隔離検証酒");
+        await tab.getByLabel("사케 한국어 이름 (필수)").fill(`이전 세션 초안 ${index}`);
+        await tab.getByLabel("새 양조장 제안").check();
+        await tab.getByLabel("양조장 일본어 이름 (필수)").fill("合成蔵");
+        await tab.getByLabel("양조장 한국어 이름 (필수)").fill("합성 양조장");
+    }
+    await expect.poll(async () => {
+        const results = await Promise.all([aBearer,otherBearer].map(Authorization =>
+            context.request.get("/api/user/me",{ headers: { Authorization } })));
+        return results.map(response => response.status());
+    },{ timeout: 75000,intervals: [1000,2000] }).toEqual([401,401]);
+
+    let release!: () => void, denied!: () => void;
+    const held = new Promise<void>(resolve => { release=resolve; });
+    const firstDenial = new Promise<void>(resolve => { denied=resolve; });
+    let firstWrites = 0, secondWrites = 0;
+    await page.route("**/api/user/sake-submissions",async route => {
+        if (route.request().method()!=="POST") return route.continue();
+        firstWrites++;
+        const response = await route.fetch();
+        expect(response.status()).toBe(401);
+        denied();
+        await held;
+        await route.fulfill({ response }).catch(() => undefined);
+    });
+    await other.route("**/api/user/sake-submissions",async route => {
+        if (route.request().method()!=="POST") return route.continue();
+        secondWrites++;
+        const response = await route.fetch();
+        expect(response.status()).toBe(401);
+        await route.fulfill({ response });
+    });
+    try {
+        await page.getByRole("button",{ name: "제보 제출",exact: true }).click();
+        await firstDenial;
+        const logout = page.waitForResponse(response => response.url().endsWith("/api/auth/logout") && response.request().method()==="POST");
+        await page.getByRole("button",{ name: "로그아웃",exact: true }).click();
+        expect((await logout).ok()).toBe(true);
+        await expect(page).toHaveURL(/\/login\?returnTo=/);
+        await page.getByRole("textbox",{ name: "이메일",exact: true }).fill(process.env.AUTH_TEST_SECOND_EMAIL!);
+        await page.getByLabel("비밀번호",{ exact: true }).fill(process.env.AUTH_TEST_SECOND_PASSWORD!);
+        await page.getByRole("button",{ name: "이메일로 로그인" }).click();
+        await expect(page).toHaveURL(/\/account\/submissions\/new$/);
+        release();
+        await other.getByRole("button",{ name: "제보 제출",exact: true }).click();
+        await expect(other).toHaveURL(/\/login\?returnTo=/);
+        await expect(page.getByLabel("사케 한국어 이름 (필수)")).toHaveValue("");
+        await page.getByRole("link",{ name: "내 제보 목록" }).click();
+        await expect(page.getByText("이 페이지에 제보가 없습니다.")).toBeVisible();
+        expect(firstWrites).toBe(1);
+        expect(secondWrites).toBe(1);
+    } finally {
+        release();
+        await other.close();
+    }
+});
+
+test("expanded optional fields fit narrow viewports and reopen at an invalid numeric range", async ({ page }, info) => {
+    test.skip(!process.env.AUTH_TEST_LOGIN_EMAIL, "Requires isolated fixtures");
+    await loginFor(page,"/account/submissions/new");
+    await page.getByLabel("사케 일본어 이름 (필수)").fill("長い試験入力".repeat(40));
+    await page.getByLabel("사케 한국어 이름 (필수)").fill("긴한국어입력".repeat(40));
+    await page.getByLabel("새 양조장 제안").check();
+    await page.getByLabel("양조장 일본어 이름 (필수)").fill("合成蔵");
+    await page.getByLabel("양조장 한국어 이름 (필수)").fill("합성 양조장");
+    const summary = page.getByText("상품 세부 정보 (선택)",{ exact: true });
+    await summary.click();
+    await page.getByLabel("산도 최댓값",{ exact: true }).fill("5");
+    await summary.click();
+    await page.getByRole("button",{ name: "제보 제출",exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "산도의 최솟값과 최댓값" })).toBeVisible();
+    await expect(page.getByLabel("산도 값 또는 최솟값",{ exact: true })).toBeFocused();
+    for (const [width,height] of [[320,568],[390,844],[768,1024],[1280,800],[1440,900]]) {
+        await page.setViewportSize({ width,height });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+        await expect(page.getByLabel("알코올 도수 (%) 최댓값",{ exact: true })).toBeVisible();
+        await page.screenshot({ path: info.outputPath(`submission-${width}x${height}.png`),fullPage: true });
+    }
+});

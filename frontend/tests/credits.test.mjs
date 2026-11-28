@@ -20,7 +20,7 @@ function setup() {
         require(name) {
             if (name === "axios") return { isAxiosError: error => error?.isAxiosError };
             if (name === "./axios") return api;
-            if (name === "./auth") return { authStore: { snapshot: () => ({ member: { memberNo: 1 } }) } };
+            if (name === "./auth") return { captureSession: () => ({memberNo: 1, generation: 1}), requireSession() {} };
             throw new Error(name);
         },
     });

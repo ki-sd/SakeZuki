@@ -85,7 +85,9 @@ test("email login, reload restoration, rotation, 403 and logout in Chromium", as
     await expect(page.getByRole("button", { name: "로그아웃", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "내 계정", exact: true }).click();
     await expect(page.getByRole("heading", { name: "내 계정", exact: true })).toBeVisible();
+    const serverLogout = page.waitForResponse(response => response.url().endsWith("/api/auth/logout") && response.request().method()==="POST");
     await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+    expect((await serverLogout).ok()).toBe(true);
     await expect(page).toHaveURL(/\/login\?returnTo=/);
     expect((await csrfPost(context.request, "/api/auth/refresh")).status()).toBe(401);
 });

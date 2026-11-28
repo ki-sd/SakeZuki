@@ -5,7 +5,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listSubmissions, submissionError, submissionsPath } from "@/app/api/submissions";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { statusLabels, submissionDate } from "./SubmissionShell";
+import { statusLabels } from "./SubmissionShell";
+import { submissionDate } from "@/commons/submission-date";
 
 export default function SubmissionList() {
     const { member } = useAuth();
