@@ -16,7 +16,8 @@ class AdminReviewRepository {
     enum Sort { CREATED, UPDATED }
 
     static final int CANDIDATE_LIMIT = 20;
-    static final String DUPLICATES_SQL = """
+    static final int SOURCE_LIMIT = 200;
+    private static final String DUPLICATES_SQL = """
             SELECT s.no,s.name_ja,s.name_ko,s.name_kana,s.sake_type,s.brewery_no,s.brand_no,
                    br.name_ja AS brewery_ja,br.name_ko AS brewery_ko,
                    bd.name_ja AS brand_ja,bd.name_ko AS brand_ko,
@@ -24,7 +25,9 @@ class AdminReviewRepository {
                    COALESCE(s.name_kana=:kana,FALSE) AS exact_kana,
                    COALESCE(s.name_ja LIKE :jaPrefix ESCAPE '!',FALSE) AS prefix_ja,
                    COALESCE(s.name_ko LIKE :koPrefix ESCAPE '!',FALSE) AS prefix_ko,
-                   COALESCE(s.name_kana LIKE :kanaPrefix ESCAPE '!',FALSE) AS prefix_kana
+                   COALESCE(s.name_kana LIKE :kanaPrefix ESCAPE '!',FALSE) AS prefix_kana,
+                   %1$s AS brewery_match, %2$s AS brand_match,
+                   COALESCE(s.sake_type=:designation,FALSE) AS designation_match
             FROM SAKE s
             JOIN BREWERY br ON br.no=s.brewery_no
             LEFT JOIN BRAND bd ON bd.no=s.brand_no
@@ -32,9 +35,7 @@ class AdminReviewRepository {
                OR s.name_ja LIKE :jaPrefix ESCAPE '!' OR s.name_ko LIKE :koPrefix ESCAPE '!'
                OR s.name_kana LIKE :kanaPrefix ESCAPE '!'
             ORDER BY (exact_ja+exact_ko+exact_kana) DESC,
-                     COALESCE(s.brewery_no=:brewery,FALSE) DESC,
-                     COALESCE(s.brand_no=:brand,FALSE) DESC,
-                     COALESCE(s.sake_type=:designation,FALSE) DESC,
+                     %1$s DESC, %2$s DESC, COALESCE(s.sake_type=:designation,FALSE) DESC,
                      s.no
             LIMIT :limit
             """;
@@ -55,27 +56,31 @@ class AdminReviewRepository {
     record Names(String ja, String ko) {}
     record Candidate(long no, String ja, String ko, String kana, String designation,
                      long breweryNo, Long brandNo, Names brewery, Names brand, List<String> nameMatches) {}
+    record RankedCandidate(Candidate catalog, boolean breweryMatch, boolean brandMatch, boolean designationMatch) {}
     record Source(long sakeNo, String system, String externalKey) {}
 
     List<Head> list(Status status, Sort sort, String query, int offset, int limit) {
         String statement = """
                 SELECT s.id,s.owner_no,s.status,s.version,s.current_revision_no,s.created_at,s.updated_at,
-                       JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.ja')) AS name_ja,
-                       JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.ko')) AS name_ko
+                       %1$s AS name_ja, %2$s AS name_ko
                 FROM CATALOG_SUBMISSION s
                 JOIN SUBMISSION_REVISION r ON r.submission_id=s.id AND r.revision_no=s.current_revision_no
                 WHERE 1=1
-                """ + (status == null ? "" : " AND s.status=:status\n")
+                """.formatted(jsonName("ja"), jsonName("ko")) + (status == null ? "" : " AND s.status=:status\n")
                 + (query == null || query.isEmpty() ? "" : """
-                    AND (JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.ja')) LIKE :search ESCAPE '!'
-                      OR JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.ko')) LIKE :search ESCAPE '!'
-                      OR JSON_UNQUOTE(JSON_EXTRACT(r.payload,'$.sake.kana')) LIKE :search ESCAPE '!')
-                    """) + " ORDER BY s." + (sort == Sort.CREATED ? "created_at" : "updated_at")
+                    AND (%s LIKE :search ESCAPE '!' OR %s LIKE :search ESCAPE '!' OR %s LIKE :search ESCAPE '!')
+                    """.formatted(jsonName("ja"), jsonName("ko"), jsonName("kana")))
+                + " ORDER BY s." + (sort == Sort.CREATED ? "created_at" : "updated_at")
                 + " DESC, s.id DESC LIMIT :limit OFFSET :offset";
         var params = sql.sql(statement).param("limit", limit).param("offset", offset);
         if (status != null) params.param("status", status.name());
         if (query != null && !query.isEmpty()) params.param("search", "%" + escapeLike(query) + "%");
         return params.query(AdminReviewRepository::head).list();
+    }
+
+    private static String jsonName(String field) {
+        String value = "JSON_EXTRACT(r.payload,'$.sake." + field + "')";
+        return "CASE WHEN JSON_TYPE(" + value + ")='STRING' THEN JSON_UNQUOTE(" + value + ") END";
     }
 
     Optional<Head> find(UUID id, boolean lock) {
@@ -142,18 +147,30 @@ class AdminReviewRepository {
                 """).params(revision, status, head.id(), head.version()).update() != 1) throw SubmissionErrors.conflict();
     }
 
-    List<Candidate> candidates(SubmissionInput draft) {
-        return sql.sql(DUPLICATES_SQL).params(duplicateParameters(draft)).query((rs, row) -> {
+    List<RankedCandidate> candidates(SubmissionInput draft) {
+        return sql.sql(duplicatesSql(draft)).params(duplicateParameters(draft)).query((rs, row) -> {
             var matches = new java.util.ArrayList<String>();
             for (String name : List.of("ja", "ko", "kana")) {
                 if (rs.getBoolean("exact_" + name)) matches.add("EXACT_" + name.toUpperCase(java.util.Locale.ROOT));
                 else if (rs.getBoolean("prefix_" + name)) matches.add("PREFIX_" + name.toUpperCase(java.util.Locale.ROOT));
             }
-            return new Candidate(rs.getLong("no"), rs.getString("name_ja"), rs.getString("name_ko"),
+            var catalog = new Candidate(rs.getLong("no"), rs.getString("name_ja"), rs.getString("name_ko"),
                     rs.getString("name_kana"), rs.getString("sake_type"), rs.getLong("brewery_no"),
                     rs.getObject("brand_no", Long.class), new Names(rs.getString("brewery_ja"),rs.getString("brewery_ko")),
                     new Names(rs.getString("brand_ja"),rs.getString("brand_ko")), matches);
+            return new RankedCandidate(catalog, rs.getBoolean("brewery_match"),
+                    rs.getBoolean("brand_match"), rs.getBoolean("designation_match"));
         }).list();
+    }
+
+    static String duplicatesSql(SubmissionInput draft) {
+        String breweryMatch = draft.brewery().proposed() == null
+                ? "COALESCE(s.brewery_no=:brewery,FALSE)"
+                : "COALESCE(br.name_ja=:breweryJa OR br.name_ko=:breweryKo,FALSE)";
+        String brandMatch = draft.brand() == null || draft.brand().proposed() == null
+                ? "COALESCE(s.brand_no=:brand,FALSE)"
+                : "COALESCE(bd.name_ja=:brandJa OR bd.name_ko=:brandKo,FALSE)";
+        return DUPLICATES_SQL.formatted(breweryMatch,brandMatch);
     }
 
     static java.util.Map<String, Object> duplicateParameters(SubmissionInput draft) {
@@ -164,11 +181,18 @@ class AdminReviewRepository {
         params.put("jaPrefix", prefix(draft.sake().ja()));
         params.put("koPrefix", prefix(draft.sake().ko()));
         params.put("kanaPrefix", prefix(draft.sake().kana()));
-        params.put("brewery", draft.brewery().existingNo());
-        params.put("brand", draft.brand() == null ? null : draft.brand().existingNo());
+        choiceParameters(params, "brewery", draft.brewery());
+        choiceParameters(params, "brand", draft.brand());
         params.put("designation", draft.designation());
         params.put("limit", CANDIDATE_LIMIT);
         return params;
+    }
+
+    private static void choiceParameters(java.util.Map<String, Object> params, String key, SubmissionInput.Choice choice) {
+        var proposed = choice == null ? null : choice.proposed();
+        params.put(key, choice == null ? null : choice.existingNo());
+        params.put(key + "Ja", proposed == null ? null : proposed.ja());
+        params.put(key + "Ko", proposed == null ? null : proposed.ko());
     }
 
     List<Source> sources(List<Long> candidates) {
@@ -176,8 +200,8 @@ class AdminReviewRepository {
         return sql.sql("""
                 SELECT sake_no,source_system,external_key FROM SAKE_SOURCE
                 WHERE sake_no IN (:numbers) AND external_key IS NOT NULL
-                ORDER BY sake_no,source_system,external_key LIMIT 200
-                """).param("numbers", candidates).query((rs, row) ->
+                ORDER BY sake_no,source_system,external_key LIMIT :limit
+                """).param("numbers", candidates).param("limit", SOURCE_LIMIT + 1).query((rs, row) ->
                     new Source(rs.getLong(1), rs.getString(2), rs.getString(3))).list();
     }
 

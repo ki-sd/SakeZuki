@@ -56,7 +56,8 @@ class AdminReviewService {
     record Candidate(AdminReviewRepository.Candidate catalog, List<String> matchReasons, List<String> reviewDifferences,
                      List<AdminReviewRepository.Source> sourceIdentifiers) {}
     record Duplicates(int currentRevision, long version, int limit, List<String> unavailableCatalogFields,
-                      Integer submittedCapacityMl, String submittedVariant, List<Candidate> candidates) {}
+                      Integer submittedCapacityMl, String submittedVariant, List<Candidate> candidates,
+                      boolean sourcesTruncated) {}
 
     SubmissionService.Page<AdminReviewRepository.Head> list(long actor, AdminReviewRepository.Status status,
                    AdminReviewRepository.Sort sort, String query, int page, int size) {
@@ -86,14 +87,17 @@ class AdminReviewService {
         var head = reviews.find(id, false).orElseThrow(SubmissionErrors::missing);
         var draft = input(reviews.current(head).payload());
         var candidates = reviews.candidates(draft);
+        var sourceRows = reviews.sources(candidates.stream().map(row -> row.catalog().no()).toList());
         var sources = new HashMap<Long,List<AdminReviewRepository.Source>>();
-        for (var source : reviews.sources(candidates.stream().map(AdminReviewRepository.Candidate::no).toList())) {
+        for (var source : sourceRows.subList(0, Math.min(sourceRows.size(), AdminReviewRepository.SOURCE_LIMIT))) {
             sources.computeIfAbsent(source.sakeNo(), ignored -> new ArrayList<>()).add(source);
         }
-        var rows = candidates.stream().map(candidate -> compare(draft, candidate, sources.getOrDefault(candidate.no(), List.of())))
+        var rows = candidates.stream().map(candidate -> compare(draft, candidate,
+                        sources.getOrDefault(candidate.catalog().no(), List.of())))
                 .toList();
         return new Duplicates(head.revision(), head.version(), AdminReviewRepository.CANDIDATE_LIMIT,
-                List.of("capacityMl", "variant"), draft.capacityMl(), draft.variant(), rows);
+                List.of("capacityMl", "variant"), draft.capacityMl(), draft.variant(), rows,
+                sourceRows.size() > AdminReviewRepository.SOURCE_LIMIT);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -171,27 +175,22 @@ class AdminReviewService {
                 json.readTree(row.payload()), attachment, row.createdAt());
     }
 
-    private static Candidate compare(SubmissionInput draft, AdminReviewRepository.Candidate row,
+    private static Candidate compare(SubmissionInput draft, AdminReviewRepository.RankedCandidate ranked,
                                      List<AdminReviewRepository.Source> sources) {
+        var row = ranked.catalog();
         var matches = new ArrayList<>(row.nameMatches());
         var differences = new ArrayList<String>();
-        compareField(matches, differences, "BREWERY", same(draft.brewery(),row.breweryNo(),row.brewery()));
+        compareField(matches, differences, "BREWERY", ranked.breweryMatch());
         if (draft.brand() != null || row.brandNo() != null) {
-            compareField(matches, differences, "BRAND", same(draft.brand(),row.brandNo(),row.brand()));
+            compareField(matches, differences, "BRAND", ranked.brandMatch());
         }
         if (draft.designation() != null) {
-            compareField(matches, differences, "DESIGNATION", draft.designation().equals(row.designation()));
+            compareField(matches, differences, "DESIGNATION", ranked.designationMatch());
         }
         return new Candidate(row, matches, differences, sources);
     }
 
     private static void compareField(List<String> matches, List<String> differences, String field, boolean matchesValue) {
         (matchesValue ? matches : differences).add(field);
-    }
-
-    private static boolean same(SubmissionInput.Choice choice, Long catalogNo, AdminReviewRepository.Names names) {
-        if (choice == null || catalogNo == null) return false;
-        if (choice.existingNo() != null) return choice.existingNo().equals(catalogNo);
-        return choice.proposed().ja().equals(names.ja()) || choice.proposed().ko().equals(names.ko());
     }
 }

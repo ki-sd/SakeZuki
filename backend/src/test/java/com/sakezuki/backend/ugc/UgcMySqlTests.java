@@ -865,6 +865,88 @@ class UgcMySqlTests {
     }
 
     @Test
+    void adminQueueSearchDistinguishesNullFromTextAndKeepsBinaryLikeAndFullNames() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String jsonNull = searchFixture("空欄", "비어 있음", null);
+        String missing = searchFixture("省略", "생략", null);
+        db.update("""
+                UPDATE SUBMISSION_REVISION SET payload=JSON_REMOVE(payload,'$.sake.kana')
+                WHERE submission_id=? AND revision_no=1
+                """, missing);
+        String upper = searchFixture("銘柄Null試験", "대문자", "カナ");
+        String lower = searchFixture("銘柄試験", "한글null시험", "テスト");
+        String kana = searchFixture("試飲", "시음", "かなnull試行");
+        String literal = searchFixture("試験%_!末", "평범한 이름", "ひらがな");
+        String wildcard = searchFixture("試験ABC!末", "비교 이름", "ヒラガナ");
+        String ja = "始日" + "酒".repeat(496) + "終日";
+        String ko = "첫한" + "술".repeat(996) + "끝한";
+        String fullKana = "はじ" + "さ".repeat(496) + "おわ";
+        String longNames = searchFixture(ja, ko, fullKana);
+        var fixtures = List.of(jsonNull, missing, upper, lower, kana, literal, wildcard, longNames);
+        db.update("""
+                UPDATE CATALOG_SUBMISSION SET created_at='2025-01-01',updated_at='2025-01-01'
+                WHERE id IN (?,?,?)
+                """, upper, lower, kana);
+        for (String query : List.of("null", "nu", "n")) {
+            assertEquals(List.of(lower,kana).stream().sorted(Comparator.reverseOrder()).toList(),
+                    queueFixtureIds(queue(admin, query, "status=PENDING&size=50"), fixtures),query);
+        }
+        for (String query : List.of("ul", "ll", "u", "l")) {
+            assertEquals(List.of(upper,lower,kana).stream().sorted(Comparator.reverseOrder()).toList(),
+                    queueFixtureIds(queue(admin, query, "status=PENDING&size=50"), fixtures),query);
+        }
+        assertEquals(List.of(upper), queueFixtureIds(queue(admin, "Null", "size=50"),fixtures));
+        assertEquals(List.of(literal), queueFixtureIds(queue(admin, "%_!", "size=50"),fixtures));
+        assertEquals(List.of(literal), queueFixtureIds(queue(admin, "ひらがな", "size=50"),fixtures));
+        assertEquals(List.of(wildcard), queueFixtureIds(queue(admin, "ヒラガナ", "size=50"),fixtures));
+        assertEquals(List.of(literal), queueFixtureIds(queue(admin, "평범한 이름", "size=50"),fixtures));
+        for (String query : List.of("始日","終日","첫한","끝한","はじ","おわ")) {
+            var page = queue(admin, query, "size=50");
+            assertEquals(List.of(longNames), queueFixtureIds(page,fixtures),query);
+            for (var item : page.path("items")) {
+                if (longNames.equals(item.path("id").asString())) {
+                    assertEquals(ja,item.path("nameJa").asString());
+                    assertEquals(ko,item.path("nameKo").asString());
+                }
+            }
+        }
+        var front = queue(admin, "null", "status=PENDING&sort=UPDATED&size=1");
+        var back = queue(admin, "null", "status=PENDING&sort=UPDATED&size=1&page=1");
+        assertEquals(1,front.path("items").size());
+        assertEquals(1,back.path("items").size());
+        assertTrue(front.path("hasMore").booleanValue());
+        assertFalse(back.path("hasMore").booleanValue());
+        assertEquals(List.of(lower,kana).stream().sorted(Comparator.reverseOrder()).toList(),
+                List.of(front.path("items").get(0).path("id").asString(),back.path("items").get(0).path("id").asString()));
+        assertTrue(queueFixtureIds(queue(admin,"null","status=REJECTED&size=50"),fixtures).isEmpty());
+    }
+
+    private String searchFixture(String ja, String ko, String kana) throws Exception {
+        var data = draft(null);
+        var names = new LinkedHashMap<String,Object>();
+        names.put("ja",ja);
+        names.put("ko",ko);
+        names.put("kana",kana);
+        data.put("sake",names);
+        return submit(member("ROLE_USER"),data);
+    }
+
+    private JsonNode queue(Member admin, String query, String params) throws Exception {
+        var response = get(admin,ADMIN+"?"+params+"&q="+java.net.URLEncoder.encode(query,StandardCharsets.UTF_8));
+        assertEquals(200,response.statusCode(),string(response));
+        return node(response);
+    }
+
+    private static List<String> queueFixtureIds(JsonNode page, List<String> fixtures) {
+        var ids = new java.util.ArrayList<String>();
+        for (var item : page.path("items")) {
+            String id = item.path("id").asString();
+            if (fixtures.contains(id)) ids.add(id);
+        }
+        return ids;
+    }
+
+    @Test
     void duplicateSearchUsesCurrentRevisionAndQueriesBoundedSeedCandidates() throws Exception {
         var owner = member("ROLE_USER");
         var admin = member("ROLE_ADMIN");
@@ -905,12 +987,141 @@ class UgcMySqlTests {
         assertEquals(10_337,new JdbcTemplate(seed).queryForObject("SELECT COUNT(*) FROM SAKE",Integer.class));
         var named = new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(seed);
         SubmissionInput draft = json.readValue(json.writeValueAsString(data),SubmissionInput.class);
-        var plan = named.queryForObject("EXPLAIN ANALYZE "+AdminReviewRepository.DUPLICATES_SQL,
+        var plan = named.queryForObject("EXPLAIN ANALYZE "+AdminReviewRepository.duplicatesSql(draft),
                 AdminReviewRepository.duplicateParameters(draft),String.class);
         assertNotNull(plan);
         assertFalse(plan.contains("Materialize"),plan);
         assertTrue(plan.contains("Limit: 20 row(s)"),plan);
         System.out.println("Admin duplicate fixture plan (10,337 seed rows): "+plan.replace('\n',' '));
+    }
+
+    @Test
+    void duplicateSearchRanksProposedBreweryAndBrandBeforeLimit() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        var sample = db.queryForMap("""
+                SELECT s.brewery_no,s.brand_no,br.name_ja AS brewery_ja,br.name_ko AS brewery_ko,
+                       bd.name_ja AS brand_ja,bd.name_ko AS brand_ko
+                FROM SAKE s JOIN BREWERY br ON br.no=s.brewery_no JOIN BRAND bd ON bd.no=s.brand_no
+                WHERE s.no=9394
+                """);
+        assertTrue(db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE name_kana LIKE 'でん%'",Integer.class) > 20);
+        var data = draft(null);
+        data.put("sake",Map.of("ja","順位検証用合成酒","ko","순위 검증용 합성주","kana","でん"));
+        data.put("brewery",Map.of("existingNo",sample.get("brewery_no")));
+        var existing = duplicateFixture(admin,data);
+        assertEquals(20,existing.size());
+        assertTrue(candidate(existing,9394).path("matchReasons").toString().contains("\"BREWERY\""));
+        assertTrue(candidate(existing,9394).path("matchReasons").toString().contains("\"PREFIX_KANA\""));
+
+        data.put("brewery",proposed(sample.get("brewery_ja"),"다른 양조장"));
+        assertEquals(existing,duplicateFixture(admin,data));
+        data.put("brewery",proposed("別の蔵",sample.get("brewery_ko")));
+        assertEquals(existing,duplicateFixture(admin,data));
+        data.put("sake",Map.of("ja","順位検証用合成酒","ko","순위 검증용 합성주","kana","  テン  "));
+        assertEquals(existing,duplicateFixture(admin,data));
+        data.put("sake",Map.of("ja","順位検証用合成酒","ko","순위 검증용 합성주","kana","でん"));
+        data.put("brewery",proposed(sample.get("brewery_ja")+" ","다른 양조장"));
+        assertNull(candidate(duplicateFixture(admin,data),9394));
+        data.put("brewery",proposed("無関係の蔵","일치하지 않는 양조장"));
+        var unmatched = duplicateFixture(admin,data);
+        assertEquals(20,unmatched.size());
+        assertNull(candidate(unmatched,9394));
+        assertTrue(unmatched.get(0).path("reviewDifferences").toString().contains("\"BREWERY\""));
+
+        data.put("brand",proposed(sample.get("brand_ja"),"다른 브랜드"));
+        var brandJa = duplicateFixture(admin,data);
+        assertTrue(candidate(brandJa,9394).path("matchReasons").toString().contains("\"BRAND\""));
+        data.put("brand",proposed("別銘柄",sample.get("brand_ko")));
+        assertEquals(brandJa,duplicateFixture(admin,data));
+        assertEquals(20,brandJa.size());
+
+        String name = "無銘柄" + UUID.randomUUID();
+        long no = catalogFixture(name,sample.get("brewery_no"));
+        try {
+            data.put("sake",Map.of("ja",name,"ko","브랜드 없음"));
+            var brandless = candidate(duplicateFixture(admin,data),no);
+            assertTrue(brandless.path("catalog").path("brandNo").isNull());
+            assertTrue(brandless.path("reviewDifferences").toString().contains("\"BRAND\""));
+            assertFalse(brandless.path("matchReasons").toString().contains("\"BRAND\""));
+        } finally {
+            db.update("DELETE FROM SAKE WHERE no=?",no);
+        }
+    }
+
+    @Test
+    void duplicateSearchReportsWhenOrderedExternalSourcesAreTruncated() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String name = "出典上限" + UUID.randomUUID();
+        var data = draft(null);
+        data.put("sake",Map.of("ja",name,"ko","출처 한도"));
+        String id = submit(member("ROLE_USER"),data);
+        var empty = duplicateResult(admin,id);
+        assertTrue(empty.path("candidates").isEmpty());
+        assertFalse(empty.path("sourcesTruncated").booleanValue());
+        long first = catalogFixture(name,1);
+        long second = catalogFixture(name,1);
+        try {
+            assertSourceCounts(duplicateResult(admin,id),0,0,false);
+            for (int i=198;i>=0;i--) addSource(first,i);
+            assertSourceCounts(duplicateResult(admin,id),199,0,false);
+            addSource(second,0);
+            assertSourceCounts(duplicateResult(admin,id),199,1,false);
+            addSource(first,199);
+            assertSourceCounts(duplicateResult(admin,id),200,0,true);
+            for (int i=200;i<205;i++) addSource(first,i);
+            var capped = duplicateResult(admin,id);
+            assertSourceCounts(capped,200,0,true);
+            assertEquals(first,capped.path("candidates").get(0).path("catalog").path("no").longValue());
+            assertEquals(second,capped.path("candidates").get(1).path("catalog").path("no").longValue());
+            var sources = capped.path("candidates").get(0).path("sourceIdentifiers");
+            assertEquals(sourceKey(first,0),sources.get(0).path("externalKey").asString());
+            assertEquals(sourceKey(first,199),sources.get(199).path("externalKey").asString());
+            assertEquals("BREWERY_OFFICIAL",sources.get(0).path("system").asString());
+        } finally {
+            db.update("DELETE FROM SAKE_SOURCE WHERE sake_no IN (?,?)",first,second);
+            db.update("DELETE FROM SAKE WHERE no IN (?,?)",first,second);
+        }
+    }
+
+    private JsonNode duplicateFixture(Member admin, Map<String,Object> data) throws Exception {
+        return duplicateResult(admin,submit(member("ROLE_USER"),data)).path("candidates");
+    }
+
+    private JsonNode duplicateResult(Member admin,String id) throws Exception {
+        var response = get(admin,adminPath(id)+"/duplicates");
+        assertEquals(200,response.statusCode(),string(response));
+        return node(response);
+    }
+
+    private static JsonNode candidate(JsonNode rows,long no) {
+        for (var row : rows) if (row.path("catalog").path("no").longValue()==no) return row;
+        return null;
+    }
+
+    private static Map<String,Object> proposed(Object ja,Object ko) {
+        return Map.of("proposed",Map.of("ja",ja,"ko",ko));
+    }
+
+    private long catalogFixture(String name,Object brewery) {
+        db.update("INSERT INTO SAKE(name_ja,brewery_no) VALUES (?,?)",name,brewery);
+        return db.queryForObject("SELECT MAX(no) FROM SAKE WHERE name_ja=?",Long.class,name);
+    }
+
+    private void addSource(long sake,int index) {
+        db.update("INSERT INTO SAKE_SOURCE(sake_no,source_system,external_key) VALUES (?,'BREWERY_OFFICIAL',?)",
+                sake,sourceKey(sake,index));
+    }
+
+    private static String sourceKey(long sake,int index) {
+        return String.format(java.util.Locale.ROOT,"pr17-%d-%03d",sake,index);
+    }
+
+    private static void assertSourceCounts(JsonNode result,int first,int second,boolean truncated) {
+        assertEquals(2,result.path("candidates").size());
+        assertTrue(result.path("sourcesTruncated").isBoolean());
+        assertEquals(truncated,result.path("sourcesTruncated").booleanValue());
+        assertEquals(first,result.path("candidates").get(0).path("sourceIdentifiers").size());
+        assertEquals(second,result.path("candidates").get(1).path("sourceIdentifiers").size());
     }
 
     private static void assertImageDenied(int code,HttpResponse<?> response) {

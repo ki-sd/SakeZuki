@@ -8,10 +8,10 @@
 
 | 요청 | 계약 |
 | --- | --- |
-| GET 기본 경로 | 상태, 정렬 CREATED/UPDATED(기본), q, page, size 지원. 0부터 페이지 번호, 기본 20·상한 50건. 이름과 현재 요약만 투영. 정렬은 시각, ID 내림차순 |
+| GET 기본 경로 | 상태, 정렬 CREATED/UPDATED(기본), q, page, size 지원. 0부터 페이지 번호, 기본 20·상한 50건. 이름과 현재 요약만 투영. JSON null과 누락된 이름은 검색에서 제외하며 실제 문자열은 기존 바이너리 비교를 사용. 정렬은 시각, ID 내림차순 |
 | GET /{id} | 현재 상태·버전, 최초·현재·중간 리비전, 원자료와 작성자, 첨부·검증·권리 상태, 감사 이벤트 |
 | GET /{id}/attachments/{assetId} | 검수 중인 제보의 불변 리비전에 연결된 검증된 STAGING 이미지 |
-| GET /{id}/duplicates | 현재 리비전 기준 후보와 매칭 근거, 추가 검토 차이, 외부 출처 식별자 |
+| GET /{id}/duplicates | 현재 리비전 기준 후보와 매칭 근거, 추가 검토 차이, 외부 출처 식별자와 전체 절단 여부 sourcesTruncated |
 | POST /{id}/revisions | expectedVersion, reason, data. PENDING만 ADMIN_REVISION으로 수정 |
 | POST /{id}/decisions | UUID Idempotency-Key, expectedVersion, revisionNo, decision, reason. REQUEST_REVISION과 REJECT 지원 |
 
@@ -29,7 +29,7 @@ V12는 결정 영수증의 영속 멱등성을 위한 SUBMISSION_REVIEW_DECISION
 
 PENDING·NEEDS_REVISION, 활성 소유 회원, 제보의 불변 리비전 연결, READY 첨부, VERIFIED STAGING, 현재 권리에서 DENIED·REVOKED가 아닌 상태를 요구한다. 종료 상태와 고립된 첨부는 미리보기를 제공하지 않는다. 사용자·관리자 비공개 미리보기는 JVM당 2개 슬롯을 공유하며 공개 게이트웨이의 기존 4개 슬롯은 별개다. 버킷 대신 서버 경로를 반환한다. 저장소에서 바이트를 읽은 후 현재 관리자 역할, 첨부 관계, 객체와 검증 세대를 다시 확인한다. 네트워크 I/O 동안 트랜잭션을 보유하지 않는다. 응답에는 검증된 MIME·길이, private, no-store 및 nosniff를 적용한다.
 
-중복 검색은 공개 이름·가나의 동일값과 길이 2자 이상 접두사를 MySQL 기존 collation으로 비교한다. 저장 이름은 정규화하여 변경하지 않는다. 일치 이름 수, 기존 양조장·브랜드·특정명칭의 일치, 내부 번호로 순위를 정한다. 기존/제안 양조장과 브랜드, 특정명칭의 차이를 응답에 남긴다. 결과는 최대 20건, 외부 출처 키는 선택한 후보의 배치 최대 200건이다. 카탈로그에 구조화된 용량·변형이 없으므로 확인 필요 필드로 표시하고 제출값을 함께 반환한다. 후보는 검수 자료다.
+중복 검색은 공개 이름·가나의 동일값과 길이 2자 이상 접두사를 MySQL 기존 collation으로 비교한다. 저장 이름은 정규화하여 변경하지 않는다. 일치 이름 수, 양조장·브랜드·특정명칭의 일치, 내부 번호로 순위를 정한다. 기존 관계는 내부 번호, 신규 제안은 일본어·한국어 이름의 열 collation 판정으로 비교한다. 같은 판정이 순위와 검수 차이에 쓰인다. 결과는 최대 20건, 외부 출처 키는 선택한 후보의 배치 최대 200건이다. 추가 출처가 있으면 sourcesTruncated가 true다. 카탈로그에 구조화된 용량·변형이 없으므로 확인 필요 필드로 표시하고 제출값을 함께 반환한다. 후보는 검수 자료다.
 
 ## UGC-02B/C 인수인계
 
@@ -46,4 +46,4 @@ PENDING·NEEDS_REVISION, 활성 소유 회원, 제보의 불변 리비전 연결
 - 모의 STAGING 바이트와 메타데이터 손상, 저장소 오류, 미리보기 중 관리자 권한·계정·권리 변경, 공유 슬롯의 경합 및 반환을 검증했다.
 - Tools Wrapper의 :image-core:cleanTest cleanTest test, Backend Wrapper bootJar, scripts/test_auth_integration.py --e2e를 사용했다. JVM 200개 중 image-core 11, Tools 기본 69·MySQL 17, Backend 기본 28·MySQL 75였다. 실패·오류·스킵은 0개였다. 선행 카탈로그 45건 경쟁과 실제 MySQL 1205 재시도를 재검증했다. 최종 Chromium 및 원격 결과는 PR 검사를 참조한다.
 
-Antigravity 집중 범위는 발급 후 역할 철회와 두 잠금 순서, 동시 결정·취소·보완, 같은 요청 키와 감사 이벤트 롤백, 기존 이미지 동의의 불변성, 권한·검증 세대가 바뀌는 미리보기, 후보 상한이다. 독립 QA와 실제 R2는 대기 상태다.
+Antigravity 집중 범위는 발급 후 역할 철회와 두 잠금 순서, 동시 결정·취소·보완, 같은 요청 키와 감사 이벤트 롤백, 기존 이미지 동의의 불변성, 권한·검증 세대가 바뀌는 미리보기, 후보 상한이다. 기존 HEAD의 독립 QA 결과와 수정 HEAD의 검증 상태는 [PR #17 QA 후속 기록](UGC-02A_QA_PR17.md)을 참고한다.
