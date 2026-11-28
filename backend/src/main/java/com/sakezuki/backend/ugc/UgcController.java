@@ -20,7 +20,11 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
-import tools.jackson.databind.ObjectMapper;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.databind.cfg.CoercionAction;
+import tools.jackson.databind.cfg.CoercionInputShape;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.type.LogicalType;
 
 import java.io.IOException;
 
@@ -28,14 +32,28 @@ import java.io.IOException;
 class UgcController {
     static final String ROOT = "/api/user/sake-submissions";
 
+    private static final JsonMapper REQUEST_JSON = JsonMapper.builder()
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+            .withCoercionConfig(LogicalType.Integer, config -> config
+                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail))
+            .withCoercionConfig(LogicalType.Float, config -> config
+                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail))
+            .withCoercionConfig(LogicalType.Boolean, config -> config
+                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail))
+            .build();
+
     private final SubmissionService submissions;
     private final AttachmentService attachments;
-    private final ObjectMapper json;
 
-    UgcController(SubmissionService submissions, AttachmentService attachments, ObjectMapper json) {
+    UgcController(SubmissionService submissions, AttachmentService attachments) {
         this.submissions = submissions;
         this.attachments = attachments;
-        this.json = json;
     }
 
     @GetMapping("/api/user/catalog/breweries")
@@ -117,9 +135,7 @@ class UgcController {
         byte[] input = request.getInputStream().readNBytes(SubmissionLimits.JSON_BYTES + 1);
         if (input.length > SubmissionLimits.JSON_BYTES) throw SubmissionErrors.error(413, "제보 본문 용량을 줄여 주세요.");
         try {
-            T value = json.readerFor(type).with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
-                            DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-                    .without(DeserializationFeature.ACCEPT_FLOAT_AS_INT).readValue(input);
+            T value = REQUEST_JSON.readerFor(type).readValue(input);
             if (value == null) throw SubmissionInput.invalid("body");
             return value;
         } catch (JacksonException invalid) {

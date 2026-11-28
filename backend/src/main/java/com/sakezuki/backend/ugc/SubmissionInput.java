@@ -11,6 +11,11 @@ record SubmissionInput(Names sake, Choice brewery, Choice brand, String designat
                        Measurement alcoholPercent, String riceJa, String riceKo, String yeastJa, String yeastKo,
                        Integer capacityMl, String variant, String sourceUrl, String notes,
                        UUID attachmentId, String imageRights, Boolean imageConsent) {
+    SubmissionInput {
+        if (notes != null) notes = notes.replace("\r\n", "\n");
+        if (imageRights != null) imageRights = imageRights.replace("\r\n", "\n");
+    }
+
     record Names(String ja, String ko, String kana) {}
     record Choice(Long existingNo, Names proposed) {}
     record Measurement(BigDecimal min, BigDecimal max) {}
@@ -33,10 +38,10 @@ record SubmissionInput(Names sake, Choice brewery, Choice brand, String designat
         text(yeastKo, 500, false, "yeastKo");
         if (capacityMl != null && (capacityMl < 1 || capacityMl > 100_000)) throw invalid("capacityMl");
         text(variant, 500, false, "variant");
-        text(notes, 2000, false, "notes");
+        text(notes, 2000, false, "notes", true);
         text(sourceUrl, 1000, false, "sourceUrl");
         if (sourceUrl != null) validateUrl(sourceUrl);
-        text(imageRights, 1000, attachmentId != null, "imageRights");
+        text(imageRights, 1000, attachmentId != null, "imageRights", true);
         if (attachmentId != null && !Boolean.TRUE.equals(imageConsent)) throw invalid("imageConsent");
         if (attachmentId == null && (imageRights != null || imageConsent != null)) throw invalid("attachmentId");
     }
@@ -56,10 +61,15 @@ record SubmissionInput(Names sake, Choice brewery, Choice brand, String designat
     }
 
     static void text(String value, int max, boolean required, String field) {
+        text(value, max, required, field, false);
+    }
+
+    private static void text(String value, int max, boolean required, String field, boolean multiline) {
         if (value == null && !required) return;
         if (value == null || value.codePoints().allMatch(c -> Character.isWhitespace(c) || Character.isSpaceChar(c))
                 || value.codePointCount(0, value.length()) > max
-                || value.codePoints().anyMatch(c -> Character.isISOControl(c) || c >= 0xd800 && c <= 0xdfff)) {
+                || value.codePoints().anyMatch(c -> (Character.isISOControl(c) && !(multiline && c == '\n'))
+                        || c >= 0xd800 && c <= 0xdfff)) {
             throw invalid(field);
         }
     }

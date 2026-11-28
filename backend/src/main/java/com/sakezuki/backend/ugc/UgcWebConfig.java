@@ -13,7 +13,8 @@ import java.util.concurrent.Semaphore;
 @Configuration
 class UgcWebConfig implements WebMvcConfigurer {
     private static final String PERMIT = UgcWebConfig.class.getName() + ".UPLOAD_PERMIT";
-    private final Semaphore uploadRequests = new Semaphore(2);
+    // Match ImageAssetService's single processing slot before multipart parsing or quota reservation.
+    private final Semaphore uploadRequests = new Semaphore(1);
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
