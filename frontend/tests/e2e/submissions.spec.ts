@@ -40,7 +40,7 @@ test("member submits a private image, retries a lost receipt and sees the saved 
         } else await route.continue();
     });
     await page.getByRole("button", { name: "제보 제출", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("서버에 연결할 수 없습니다");
+    await expect(page.getByRole("alert").filter({ hasText: "서버에 연결할 수 없습니다" })).toBeVisible();
     await page.getByRole("button", { name: "제보 제출", exact: true }).click();
     await expect(page).toHaveURL(/\/account\/submissions\/[0-9a-f-]{36}$/);
     expect(keys[0]).toBeTruthy();
