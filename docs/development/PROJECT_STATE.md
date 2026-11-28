@@ -10,7 +10,7 @@
 | 추천 | DB 후보를 Gemini가 재랭킹하고 공용 캐시를 활용. 유료 추천은 개인 스냅샷과 분리. 같은 조건의 유효한 개인 기록을 먼저 제시하고 무료 재열람 또는 새 추천 선택 |
 | 권한·크레딧 | Google OAuth2·JWT, refresh 회전과 재사용 탐지. 본인·성인확인 완료 시 최초 10크레딧, 캐시 여부와 무관하게 새 추천 1크레딧. 예약·확정·실패 복구와 멱등성 유지. 개인 기록 30일 무료 재열람 |
 | 외부 연동 | 본인확인 실제 사업자·PG 미연동. 공개 예시는 수동 편집 데이터이며 생성/차감 없음 |
-| 이미지 및 수집 | 이미지 URL과 실패 시 대체 UI 사용. tools의 수집·파싱·번역은 별도 Gradle 모듈. 기존 외부 URL 로딩 장애 보고. Tools의 R2 저장 파이프라인이 main에 반영됐으며 Windows 개발 버킷 핵심 검증을 통과했다. IMG-03B-1 출처 구조는 main에 병합됐다. 공통 이미지 모듈은 main에 병합됐다. IMG-03B-3 자산 기반은 PR #15로 main에 병합됐다. 사용자 제보 Backend는 검토 중이다. [IMG-03A-IT](IMG-03A_IT_R2_SMOKE.md) · [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) |
+| 이미지 및 수집 | 이미지 URL과 실패 시 대체 UI 사용. tools의 수집·파싱·번역은 별도 Gradle 모듈. 기존 외부 URL 로딩 장애 보고. Tools의 R2 저장 파이프라인이 main에 반영됐으며 Windows 개발 버킷 핵심 검증을 통과했다. IMG-03B-1 출처 구조는 main에 병합됐다. 공통 이미지 모듈은 main에 병합됐다. IMG-03B-3 자산 기반은 PR #15로 main에 병합됐다. 사용자 제보 Backend는 PR #16에서 병합됐고 관리자 검수는 검토 중이다. [IMG-03A-IT](IMG-03A_IT_R2_SMOKE.md) · [카탈로그 설계](UGC_CATALOG_ARCHITECTURE.md) |
 
 PR #2 인증·크레딧은 main에 병합됐다. PR #3은 선행 브랜치에 병합됐고, PR #4가 그 결과를 main에 반영했다. 아래 CI는 PR #4 head `70710bb5964f4e42ae56be02f22ff82a1377907b` 대상이다. main 병합 커밋과 SHA는 다르며 Git tree는 동일하다. backend 28 + MySQL 24, frontend 16, Chromium 9 및 Linux Docker HTTP/HTTPS 통과가 기록돼 있다. [PR #2](https://github.com/ki-sd/SakeZuki/pull/2) · [PR #3](https://github.com/ki-sd/SakeZuki/pull/3) · [PR #4](https://github.com/ki-sd/SakeZuki/pull/4) · [CI](https://github.com/ki-sd/SakeZuki/actions/runs/44987630641)
 

@@ -119,6 +119,19 @@ class CatalogMigrationTests {
         assertEquals(0, count("SUBMISSION_REVISION"));
     }
 
+    @Test
+    void freshDatabaseAndV11UpgradeInstallReviewLedger() {
+        assertEquals(12, flyway("12").migrate().migrationsExecuted);
+        assertCompleteBackfill();
+        assertEquals(0, count("SUBMISSION_REVIEW_DECISION"));
+        flyway("12").clean();
+        assertEquals(11, flyway("11").migrate().migrationsExecuted);
+        var before = db.queryForList("SELECT * FROM SAKE ORDER BY no");
+        assertEquals(1, flyway("12").migrate().migrationsExecuted);
+        assertEquals(before, db.queryForList("SELECT * FROM SAKE ORDER BY no"));
+        assertEquals(0, count("SUBMISSION_REVIEW_DECISION"));
+    }
+
     private void assertCompleteBackfill() {
         assertEquals(10_337, count("SAKE"));
         for (String table : CATALOG) {

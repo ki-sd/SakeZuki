@@ -52,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "ugc.open-submissions=2", "ugc.uploads-per-day=2"})
 class UgcMySqlTests {
     private static final String ROOT = UgcController.ROOT;
+    private static final String ADMIN = AdminReviewController.ROOT;
     @LocalServerPort int port;
     @Autowired JdbcTemplate db;
     @Autowired ObjectMapper json;
@@ -562,6 +563,613 @@ class UgcMySqlTests {
                 FROM SUBMISSION_ATTACHMENT WHERE owner_no=?
                 """, member.no());
     }
+
+    @Test
+    void administratorReadsAreAuthorizedByCurrentDatabaseRoleAndDoNotExposeAccountDetails() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String id = submit(owner, draft(null));
+        String path = adminPath(id);
+        assertEquals(401, get(null, ADMIN).statusCode());
+        assertEquals(403, get(owner, path).statusCode());
+        assertEquals(404, get(admin, adminPath(UUID.randomUUID().toString())).statusCode());
+        var detail = get(admin, path);
+        assertEquals(200, detail.statusCode(), string(detail));
+        assertEquals("private, no-store", detail.headers().firstValue("Cache-Control").orElseThrow());
+        assertEquals(owner.no(), node(detail).get("submission").get("owner").longValue());
+        assertEquals("MEMBER", node(detail).get("original").get("authorRole").asString());
+        assertEquals(1, node(detail).get("current").get("number").intValue());
+        assertFalse(string(detail).contains("example.invalid"));
+        assertFalse(string(detail).contains("\"password\""));
+        assertFalse(string(detail).contains("\"phone\""));
+        assertFalse(string(detail).contains("\"address1\""));
+        String search = java.net.URLEncoder.encode("合成酒", StandardCharsets.UTF_8);
+        assertEquals(200, get(admin, ADMIN+"?status=PENDING&sort=CREATED&q="+search+"&size=1").statusCode());
+        assertEquals(422, get(admin, ADMIN+"?size=51").statusCode());
+        assertEquals(422, get(admin, ADMIN+"?status=BAD").statusCode());
+        assertEquals(422, post(admin,path+"/decisions",UUID.randomUUID(),Map.of(
+                "actorNo",owner.no(),"expectedVersion",0,"revisionNo",1,"decision","REJECT","reason","시험")).statusCode());
+        db.update("DELETE FROM MEMBER_AUTHORITY WHERE member_no=? AND authority='ROLE_ADMIN'", admin.no());
+        assertEquals(403, get(admin, path).statusCode());
+        assertEquals(403, postJson(admin,path+"/decisions",UUID.randomUUID(),"{",false).statusCode());
+        db.update("INSERT INTO MEMBER_AUTHORITY(member_no,authority) VALUES(?,'ROLE_ADMIN')",admin.no());
+        db.update("UPDATE MEMBER SET status='INACTIVE' WHERE no=?",admin.no());
+        assertEquals(401, get(admin,path).statusCode());
+    }
+
+    @Test
+    void adminQueueFiltersStatusNameAndStablePagesWithoutRevisionPayloads() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        var firstDraft = draft(null);
+        var secondDraft = draft(null);
+        String marker = "검수" + UUID.randomUUID();
+        firstDraft.put("sake",Map.of("ja",marker+" 1","ko","합성"));
+        secondDraft.put("sake",Map.of("ja",marker+" 2","ko","합성"));
+        String first = submit(owner,firstDraft);
+        String second = submit(owner,secondDraft);
+        db.update("UPDATE CATALOG_SUBMISSION SET created_at='2025-01-01 00:00:00',updated_at='2025-01-01 00:00:00' WHERE id IN (?,?)",first,second);
+        String url = ADMIN + "?status=PENDING&sort=UPDATED&size=1&q=" + java.net.URLEncoder.encode(marker,StandardCharsets.UTF_8);
+        var front = node(get(admin,url));
+        var back = node(get(admin,url+"&page=1"));
+        assertTrue(front.get("hasMore").booleanValue());
+        assertFalse(back.get("hasMore").booleanValue());
+        assertEquals(List.of(first,second).stream().sorted(Comparator.reverseOrder()).toList(),
+                List.of(front.get("items").get(0).get("id").asString(),back.get("items").get(0).get("id").asString()));
+        assertFalse(front.get("items").get(0).has("payload"));
+        assertFalse(front.get("items").get(0).has("attachment"));
+        assertEquals(0, node(get(admin,url.replace("PENDING","REJECTED"))).get("items").size());
+    }
+
+    @Test
+    void administratorRevisionPreservesOriginalAndCannotInventConsentOrMoveAttachments() throws Exception {
+        var owner = member("ROLE_USER");
+        var other = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String asset = uploadedAsset(owner);
+        String foreign = uploadedAsset(other);
+        var original = draft(asset);
+        original.put("imageRights","첫째 줄\n둘째 줄");
+        String id = submit(owner, original);
+        submit(other,draft(foreign));
+        var changed = new LinkedHashMap<>(original);
+        changed.put("notes","수정\r\n설명");
+        changed.put("imageRights","다른 근거");
+        assertEquals(422, reviseAsAdmin(admin,id,0,changed).statusCode());
+        changed.put("imageRights","첫째 줄\n둘째 줄");
+        changed.put("imageConsent",false);
+        assertEquals(422, reviseAsAdmin(admin,id,0,changed).statusCode());
+        changed.put("imageConsent",true);
+        changed.put("attachmentId",foreign);
+        assertEquals(422, reviseAsAdmin(admin,id,0,changed).statusCode());
+        changed.put("attachmentId",asset);
+        assertEquals(422, postJson(admin,adminPath(id)+"/revisions",null,
+                "{\"expectedVersion\":0,\"expectedVersion\":0,\"reason\":\"검수\",\"data\":"
+                + json.writeValueAsString(changed)+"}",false).statusCode());
+        changed.put("capacityMl", "720");
+        assertEquals(422, reviseAsAdmin(admin,id,0,changed).statusCode());
+        changed.remove("capacityMl");
+        assertEquals(409, reviseAsAdmin(admin,id,1,changed).statusCode());
+        assertEquals(201, reviseAsAdmin(admin,id,0,changed).statusCode());
+        var detail = node(get(admin,adminPath(id)));
+        assertEquals(2,detail.get("current").get("number").intValue());
+        assertEquals(1,detail.get("current").get("parent").intValue());
+        assertEquals("ADMIN",detail.get("current").get("authorRole").asString());
+        assertEquals(admin.no(),detail.get("current").get("authorNo").longValue());
+        assertEquals("수정\n설명",detail.get("current").get("data").get("notes").asString());
+        assertEquals("검수 수정",detail.get("events").get(1).get("reason").asString());
+        assertEquals("VERIFIED",detail.get("current").get("attachment").get("stagingState").asString());
+        assertTrue(detail.get("original").get("data").get("notes").isNull());
+        var without = draft(null);
+        assertEquals(201,reviseAsAdmin(admin,id,1,without).statusCode());
+        assertEquals(1,node(get(admin,adminPath(id))).get("previous").size());
+        assertEquals(422,reviseAsAdmin(admin,id,2,original).statusCode());
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM IMAGE_RIGHTS_EVENT WHERE asset_id=?",Integer.class,asset));
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE name_ja='合成酒'",Integer.class));
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM CREDIT_LEDGER WHERE member_no IN (?,?)",Integer.class,owner.no(),admin.no()));
+    }
+
+    @Test
+    void adminDecisionsReplayAndDoNotCarryReviewAcrossUserRevisions() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String id = submit(owner,draft(null));
+        UUID key = UUID.randomUUID();
+        assertEquals(422, decideAsAdmin(admin,id,key,"APPROVE",0,1).statusCode());
+        assertEquals(422, decideAsAdmin(admin,id,key,0,0,1).statusCode());
+        assertEquals(409, decideAsAdmin(admin,id,key,"REJECT",0,2).statusCode());
+        var change = decideAsAdmin(admin,id,key,"REQUEST_REVISION",0,1);
+        assertEquals(200, change.statusCode(), string(change));
+        assertEquals("NEEDS_REVISION",node(change).get("status").asString());
+        assertEquals(409,reviseAsAdmin(admin,id,1,draft(null)).statusCode());
+        assertEquals(201,post(owner,ROOT+"/"+id+"/revisions",null,
+                Map.of("expectedVersion",1,"data",draft(null))).statusCode());
+        assertEquals(node(change),node(decideAsAdmin(admin,id,key,"REQUEST_REVISION",0,1)));
+        assertEquals(409,decideAsAdmin(admin,id,key,"REJECT",2,2).statusCode());
+        assertEquals(409,decideAsAdmin(admin,id,UUID.randomUUID(),"REJECT",2,1).statusCode());
+        assertEquals(200,decideAsAdmin(admin,id,UUID.randomUUID(),"REJECT",2,2).statusCode());
+        assertEquals(409,decideAsAdmin(admin,id,UUID.randomUUID(),"REJECT",3,2).statusCode());
+        assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_REVIEW_DECISION WHERE submission_id=?",Integer.class,id));
+        assertEquals(4,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_EVENT WHERE submission_id=?",Integer.class,id));
+    }
+
+    @Test
+    void decisionLedgerWriteFailureRollsBackStateAndAudit() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String id = submit(owner,draft(null));
+        UUID key = UUID.randomUUID();
+        db.execute("ALTER TABLE SUBMISSION_REVIEW_DECISION ADD CONSTRAINT fixture_review_failure CHECK (request_key <> '"+key+"')");
+        try {
+            var failed = decideAsAdmin(admin,id,key,"REJECT",0,1);
+            assertEquals(500,failed.statusCode());
+            assertFalse(string(failed).contains("fixture_review_failure"));
+        } finally {
+            db.execute("ALTER TABLE SUBMISSION_REVIEW_DECISION DROP CHECK fixture_review_failure");
+        }
+        assertEquals("PENDING",db.queryForObject("SELECT status FROM CATALOG_SUBMISSION WHERE id=?",String.class,id));
+        assertEquals(0L,db.queryForObject("SELECT version FROM CATALOG_SUBMISSION WHERE id=?",Long.class,id));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_EVENT WHERE submission_id=?",Integer.class,id));
+        assertEquals(200,decideAsAdmin(admin,id,key,"REJECT",0,1).statusCode());
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "REVISION,CANCEL", "REJECT,CANCEL", "REQUEST_REVISION,CANCEL",
+            "REJECT,REQUEST_REVISION", "REVISION,REJECT", "REJECT,RESUBMIT"
+    })
+    void reviewStateRacesCommitExactlyOneOperation(String firstAction, String secondAction) throws Exception {
+        var owner = member("ROLE_USER");
+        var first = member("ROLE_ADMIN");
+        var second = member("ROLE_ADMIN");
+        String id = submit(owner,draft(null));
+        if ("RESUBMIT".equals(secondAction)) {
+            assertEquals(200,decideAsAdmin(first,id,UUID.randomUUID(),"REQUEST_REVISION",0,1).statusCode());
+        }
+        var gate = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var a = pool.submit(() -> {
+                gate.await();
+                if ("RESUBMIT".equals(secondAction)) return decideAsAdmin(first,id,UUID.randomUUID(),"REJECT",1,1).statusCode();
+                return raceAction(first,id,firstAction);
+            });
+            var b = pool.submit(() -> {
+                gate.await();
+                if ("RESUBMIT".equals(secondAction)) return post(owner,ROOT+"/"+id+"/revisions",null,
+                        Map.of("expectedVersion",1,"data",draft(null))).statusCode();
+                return raceAction("CANCEL".equals(secondAction)?owner:second,id,secondAction);
+            });
+            gate.countDown();
+            var codes = List.of(a.get(15,TimeUnit.SECONDS),b.get(15,TimeUnit.SECONDS));
+            assertEquals(1,Collections.frequency(codes,409),codes.toString());
+            assertTrue(codes.contains(200)||codes.contains(201),codes.toString());
+        }
+        int expected = "RESUBMIT".equals(secondAction)?2:1;
+        assertEquals((long)expected,db.queryForObject("SELECT version FROM CATALOG_SUBMISSION WHERE id=?",Long.class,id));
+        assertEquals(expected+1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_EVENT WHERE submission_id=?",Integer.class,id));
+    }
+
+    @Test
+    void roleRevocationCommittedWhileDecisionWaitsPreventsAuditOrStateChange() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String id = submit(owner,draft(null));
+        var revoked = new CountDownLatch(1);
+        var finishRevocation = new CountDownLatch(1);
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(manager);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var revoke = pool.submit(() -> transaction.executeWithoutResult(status -> {
+                db.update("DELETE FROM MEMBER_AUTHORITY WHERE member_no=? AND authority='ROLE_ADMIN'",admin.no());
+                revoked.countDown();
+                await(finishRevocation);
+            }));
+            assertTrue(revoked.await(10,TimeUnit.SECONDS));
+            var decision = pool.submit(() -> decideAsAdmin(admin,id,UUID.randomUUID(),"REJECT",0,1));
+            try {
+                boolean waiting = false;
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (!waiting && System.nanoTime() < deadline && !decision.isDone()) {
+                    waiting = db.queryForObject("""
+                            SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID<>CONNECTION_ID()
+                            AND INFO LIKE '%MEMBER_AUTHORITY%' AND INFO LIKE '%FOR SHARE%'
+                            """,Integer.class) > 0;
+                    if (!waiting) Thread.sleep(20);
+                }
+                assertTrue(waiting, "live decision did not wait for the role row");
+            } finally {
+                finishRevocation.countDown();
+            }
+            revoke.get(10,TimeUnit.SECONDS);
+            assertEquals(403,decision.get(10,TimeUnit.SECONDS).statusCode());
+        }
+        assertEquals("PENDING",db.queryForObject("SELECT status FROM CATALOG_SUBMISSION WHERE id=?",String.class,id));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM SUBMISSION_EVENT WHERE submission_id=?",Integer.class,id));
+    }
+
+    @Test
+    void adminPreviewRechecksAuthorityAccountRightsAndIntegrityAfterRead() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String asset = uploadedAsset(owner);
+        String id = submit(owner,draft(asset));
+        String other = submit(owner,draft(null));
+        String path = adminPath(id)+"/attachments/"+asset;
+        var ok = get(admin,path);
+        assertEquals(200,ok.statusCode(),string(ok));
+        assertEquals("image/png",ok.headers().firstValue("Content-Type").orElseThrow());
+        assertEquals(ok.body().length,ok.headers().firstValueAsLong("Content-Length").orElseThrow());
+        assertEquals("nosniff",ok.headers().firstValue("X-Content-Type-Options").orElseThrow());
+        assertEquals(403,get(owner,path).statusCode());
+        assertEquals(404,get(admin,adminPath(other)+"/attachments/"+asset).statusCode());
+        assertEquals(404,get(admin,adminPath(id)+"/attachments/invalid").statusCode());
+        staging.afterRead = () -> db.update("DELETE FROM MEMBER_AUTHORITY WHERE member_no=? AND authority='ROLE_ADMIN'",admin.no());
+        try { assertImageDenied(403,get(admin,path)); }
+        finally { staging.afterRead = () -> {}; }
+        db.update("INSERT INTO MEMBER_AUTHORITY(member_no,authority) VALUES(?,'ROLE_ADMIN')",admin.no());
+        staging.afterRead = () -> db.update("UPDATE MEMBER SET status='INACTIVE' WHERE no=?",admin.no());
+        try { assertImageDenied(401,get(admin,path)); }
+        finally { staging.afterRead = () -> {}; }
+        db.update("UPDATE MEMBER SET status='ACTIVE' WHERE no=?",admin.no());
+        staging.afterRead = () -> { throw new IOException("fixture service unavailable"); };
+        try { assertImageDenied(503,get(admin,path)); }
+        finally { staging.afterRead = () -> {}; }
+        String key = db.queryForObject("SELECT object_key FROM IMAGE_OBJECT WHERE asset_id=?",String.class,asset);
+        var original = staging.objects.get(key);
+        staging.objects.put(key,new ImageStorage.Payload(original.contentType(),original.cacheControl(),original.declaredSha256()+"invalid",original.bytes()));
+        assertImageDenied(503,get(admin,path));
+        staging.objects.put(key,original);
+        images.revalidate(UUID.fromString(asset),ImageStores.Area.STAGING);
+        byte[] corrupt = original.bytes().clone();
+        corrupt[0] ^= 1;
+        staging.objects.put(key,new ImageStorage.Payload(original.contentType(),original.cacheControl(),original.declaredSha256(),corrupt));
+        assertImageDenied(503,get(admin,path));
+        staging.objects.put(key,original);
+        images.revalidate(UUID.fromString(asset),ImageStores.Area.STAGING);
+        staging.afterRead = () -> db.update("""
+                INSERT INTO IMAGE_RIGHTS_EVENT(asset_id,decision,scope,evidence_ref,decided_by)
+                VALUES (?,'REVOKED','PUBLIC_WEB','fixture','fixture')
+                """,asset);
+        try { assertImageDenied(404,get(admin,path)); }
+        finally { staging.afterRead = () -> {}; }
+        assertEquals(404,get(admin,path).statusCode());
+    }
+
+    @Test
+    void ownerAndAdminSharePrivatePreviewLimitAndReleaseIt() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        String asset = uploadedAsset(owner);
+        String id = submit(owner,draft(asset));
+        String adminPreview = adminPath(id)+"/attachments/"+asset;
+        String ownerPreview = ROOT+"/"+id+"/attachments/"+asset;
+        var started = new CountDownLatch(2);
+        var release = new CountDownLatch(1);
+        staging.afterRead = () -> { started.countDown(); await(release); };
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var a = pool.submit(() -> get(admin,adminPreview));
+            var b = pool.submit(() -> get(owner,ownerPreview));
+            try {
+                assertTrue(started.await(10,TimeUnit.SECONDS));
+                assertImageDenied(503,get(admin,adminPreview));
+            } finally {
+                release.countDown();
+            }
+            assertEquals(200,a.get(10,TimeUnit.SECONDS).statusCode());
+            assertEquals(200,b.get(10,TimeUnit.SECONDS).statusCode());
+        } finally {
+            staging.afterRead = () -> {};
+        }
+        assertEquals(200,get(admin,adminPreview).statusCode());
+        assertEquals(200,decideAsAdmin(admin,id,UUID.randomUUID(),"REJECT",0,1).statusCode());
+        assertImageDenied(404,get(admin,adminPreview));
+    }
+
+    @Test
+    void adminQueueSearchDistinguishesNullFromTextAndKeepsBinaryLikeAndFullNames() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String jsonNull = searchFixture("空欄", "비어 있음", null);
+        String missing = searchFixture("省略", "생략", null);
+        db.update("""
+                UPDATE SUBMISSION_REVISION SET payload=JSON_REMOVE(payload,'$.sake.kana')
+                WHERE submission_id=? AND revision_no=1
+                """, missing);
+        String upper = searchFixture("銘柄Null試験", "대문자", "カナ");
+        String lower = searchFixture("銘柄試験", "한글null시험", "テスト");
+        String kana = searchFixture("試飲", "시음", "かなnull試行");
+        String literal = searchFixture("試験%_!末", "평범한 이름", "ひらがな");
+        String wildcard = searchFixture("試験ABC!末", "비교 이름", "ヒラガナ");
+        String ja = "始日" + "酒".repeat(496) + "終日";
+        String ko = "첫한" + "술".repeat(996) + "끝한";
+        String fullKana = "はじ" + "さ".repeat(496) + "おわ";
+        String longNames = searchFixture(ja, ko, fullKana);
+        var fixtures = List.of(jsonNull, missing, upper, lower, kana, literal, wildcard, longNames);
+        db.update("""
+                UPDATE CATALOG_SUBMISSION SET created_at='2025-01-01',updated_at='2025-01-01'
+                WHERE id IN (?,?,?)
+                """, upper, lower, kana);
+        for (String query : List.of("null", "nu", "n")) {
+            assertEquals(List.of(lower,kana).stream().sorted(Comparator.reverseOrder()).toList(),
+                    queueFixtureIds(queue(admin, query, "status=PENDING&size=50"), fixtures),query);
+        }
+        for (String query : List.of("ul", "ll", "u", "l")) {
+            assertEquals(List.of(upper,lower,kana).stream().sorted(Comparator.reverseOrder()).toList(),
+                    queueFixtureIds(queue(admin, query, "status=PENDING&size=50"), fixtures),query);
+        }
+        assertEquals(List.of(upper), queueFixtureIds(queue(admin, "Null", "size=50"),fixtures));
+        assertEquals(List.of(literal), queueFixtureIds(queue(admin, "%_!", "size=50"),fixtures));
+        assertEquals(List.of(literal), queueFixtureIds(queue(admin, "ひらがな", "size=50"),fixtures));
+        assertEquals(List.of(wildcard), queueFixtureIds(queue(admin, "ヒラガナ", "size=50"),fixtures));
+        assertEquals(List.of(literal), queueFixtureIds(queue(admin, "평범한 이름", "size=50"),fixtures));
+        for (String query : List.of("始日","終日","첫한","끝한","はじ","おわ")) {
+            var page = queue(admin, query, "size=50");
+            assertEquals(List.of(longNames), queueFixtureIds(page,fixtures),query);
+            for (var item : page.path("items")) {
+                if (longNames.equals(item.path("id").asString())) {
+                    assertEquals(ja,item.path("nameJa").asString());
+                    assertEquals(ko,item.path("nameKo").asString());
+                }
+            }
+        }
+        var front = queue(admin, "null", "status=PENDING&sort=UPDATED&size=1");
+        var back = queue(admin, "null", "status=PENDING&sort=UPDATED&size=1&page=1");
+        assertEquals(1,front.path("items").size());
+        assertEquals(1,back.path("items").size());
+        assertTrue(front.path("hasMore").booleanValue());
+        assertFalse(back.path("hasMore").booleanValue());
+        assertEquals(List.of(lower,kana).stream().sorted(Comparator.reverseOrder()).toList(),
+                List.of(front.path("items").get(0).path("id").asString(),back.path("items").get(0).path("id").asString()));
+        assertTrue(queueFixtureIds(queue(admin,"null","status=REJECTED&size=50"),fixtures).isEmpty());
+    }
+
+    private String searchFixture(String ja, String ko, String kana) throws Exception {
+        var data = draft(null);
+        var names = new LinkedHashMap<String,Object>();
+        names.put("ja",ja);
+        names.put("ko",ko);
+        names.put("kana",kana);
+        data.put("sake",names);
+        return submit(member("ROLE_USER"),data);
+    }
+
+    private JsonNode queue(Member admin, String query, String params) throws Exception {
+        var response = get(admin,ADMIN+"?"+params+"&q="+java.net.URLEncoder.encode(query,StandardCharsets.UTF_8));
+        assertEquals(200,response.statusCode(),string(response));
+        return node(response);
+    }
+
+    private static List<String> queueFixtureIds(JsonNode page, List<String> fixtures) {
+        var ids = new java.util.ArrayList<String>();
+        for (var item : page.path("items")) {
+            String id = item.path("id").asString();
+            if (fixtures.contains(id)) ids.add(id);
+        }
+        return ids;
+    }
+
+    @Test
+    void duplicateSearchUsesCurrentRevisionAndQueriesBoundedSeedCandidates() throws Exception {
+        var owner = member("ROLE_USER");
+        var admin = member("ROLE_ADMIN");
+        var sample = db.queryForMap("SELECT name_ja,name_ko,brewery_no,brand_no,sake_type FROM SAKE WHERE no=1");
+        var kana = db.queryForObject("""
+                SELECT LEFT(name_kana,2) AS prefix FROM SAKE WHERE CHAR_LENGTH(name_kana)>2
+                GROUP BY prefix HAVING COUNT(*)>=25 ORDER BY COUNT(*) DESC,prefix LIMIT 1
+                """,String.class);
+        String id = submit(owner,draft(null));
+        var data = draft(null);
+        data.put("sake",Map.of("ja",sample.get("name_ja"),"ko",sample.get("name_ko"),"kana",kana));
+        data.put("brewery",Map.of("existingNo",sample.get("brewery_no")));
+        data.put("brand",Map.of("existingNo",sample.get("brand_no")));
+        data.put("designation",sample.get("sake_type"));
+        data.put("capacityMl",720);
+        data.put("variant","합성 에디션");
+        assertEquals(201,reviseAsAdmin(admin,id,0,data).statusCode());
+        var response = get(admin,adminPath(id)+"/duplicates");
+        assertEquals(200,response.statusCode(),string(response));
+        var result = node(response);
+        assertEquals(2,result.get("currentRevision").intValue());
+        assertEquals(20,result.get("candidates").size());
+        var top = result.get("candidates").get(0);
+        assertEquals(1L,top.get("catalog").get("no").longValue());
+        assertTrue(top.get("matchReasons").toString().contains("EXACT_JA"));
+        assertFalse(top.get("sourceIdentifiers").isEmpty());
+        assertEquals(720,result.get("submittedCapacityMl").intValue());
+        assertTrue(result.get("unavailableCatalogFields").toString().contains("variant"));
+
+        String authUrl = System.getenv("AUTH_TEST_JDBC_URL");
+        assertTrue(authUrl.matches("jdbc:mysql://(?:localhost|127\\.0\\.0\\.1):3308/sakezuki_auth_it(?:\\?.*)?"));
+        var seed = new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                authUrl.replace("/sakezuki_auth_it","/sakezuki_catalog_it"),
+                System.getenv("AUTH_TEST_DB_USER"),System.getenv("AUTH_TEST_DB_PASSWORD"));
+        var flyway = org.flywaydb.core.Flyway.configure().dataSource(seed).target("12").cleanDisabled(false).load();
+        flyway.clean();
+        flyway.migrate();
+        assertEquals(10_337,new JdbcTemplate(seed).queryForObject("SELECT COUNT(*) FROM SAKE",Integer.class));
+        var named = new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(seed);
+        SubmissionInput draft = json.readValue(json.writeValueAsString(data),SubmissionInput.class);
+        var plan = named.queryForObject("EXPLAIN ANALYZE "+AdminReviewRepository.duplicatesSql(draft),
+                AdminReviewRepository.duplicateParameters(draft),String.class);
+        assertNotNull(plan);
+        assertFalse(plan.contains("Materialize"),plan);
+        assertTrue(plan.contains("Limit: 20 row(s)"),plan);
+        System.out.println("Admin duplicate fixture plan (10,337 seed rows): "+plan.replace('\n',' '));
+    }
+
+    @Test
+    void duplicateSearchRanksProposedBreweryAndBrandBeforeLimit() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        var sample = db.queryForMap("""
+                SELECT s.brewery_no,s.brand_no,br.name_ja AS brewery_ja,br.name_ko AS brewery_ko,
+                       bd.name_ja AS brand_ja,bd.name_ko AS brand_ko
+                FROM SAKE s JOIN BREWERY br ON br.no=s.brewery_no JOIN BRAND bd ON bd.no=s.brand_no
+                WHERE s.no=9394
+                """);
+        assertTrue(db.queryForObject("SELECT COUNT(*) FROM SAKE WHERE name_kana LIKE 'でん%'",Integer.class) > 20);
+        var data = draft(null);
+        data.put("sake",Map.of("ja","順位検証用合成酒","ko","순위 검증용 합성주","kana","でん"));
+        data.put("brewery",Map.of("existingNo",sample.get("brewery_no")));
+        var existing = duplicateFixture(admin,data);
+        assertEquals(20,existing.size());
+        assertTrue(candidate(existing,9394).path("matchReasons").toString().contains("\"BREWERY\""));
+        assertTrue(candidate(existing,9394).path("matchReasons").toString().contains("\"PREFIX_KANA\""));
+
+        data.put("brewery",proposed(sample.get("brewery_ja"),"다른 양조장"));
+        assertEquals(existing,duplicateFixture(admin,data));
+        data.put("brewery",proposed("別の蔵",sample.get("brewery_ko")));
+        assertEquals(existing,duplicateFixture(admin,data));
+        data.put("sake",Map.of("ja","順位検証用合成酒","ko","순위 검증용 합성주","kana","  テン  "));
+        assertEquals(existing,duplicateFixture(admin,data));
+        data.put("sake",Map.of("ja","順位検証用合成酒","ko","순위 검증용 합성주","kana","でん"));
+        data.put("brewery",proposed(sample.get("brewery_ja")+" ","다른 양조장"));
+        assertNull(candidate(duplicateFixture(admin,data),9394));
+        data.put("brewery",proposed("無関係の蔵","일치하지 않는 양조장"));
+        var unmatched = duplicateFixture(admin,data);
+        assertEquals(20,unmatched.size());
+        assertNull(candidate(unmatched,9394));
+        assertTrue(unmatched.get(0).path("reviewDifferences").toString().contains("\"BREWERY\""));
+
+        data.put("brand",proposed(sample.get("brand_ja"),"다른 브랜드"));
+        var brandJa = duplicateFixture(admin,data);
+        assertTrue(candidate(brandJa,9394).path("matchReasons").toString().contains("\"BRAND\""));
+        data.put("brand",proposed("別銘柄",sample.get("brand_ko")));
+        assertEquals(brandJa,duplicateFixture(admin,data));
+        assertEquals(20,brandJa.size());
+
+        String name = "無銘柄" + UUID.randomUUID();
+        long no = catalogFixture(name,sample.get("brewery_no"));
+        try {
+            data.put("sake",Map.of("ja",name,"ko","브랜드 없음"));
+            var brandless = candidate(duplicateFixture(admin,data),no);
+            assertTrue(brandless.path("catalog").path("brandNo").isNull());
+            assertTrue(brandless.path("reviewDifferences").toString().contains("\"BRAND\""));
+            assertFalse(brandless.path("matchReasons").toString().contains("\"BRAND\""));
+        } finally {
+            db.update("DELETE FROM SAKE WHERE no=?",no);
+        }
+    }
+
+    @Test
+    void duplicateSearchReportsWhenOrderedExternalSourcesAreTruncated() throws Exception {
+        var admin = member("ROLE_ADMIN");
+        String name = "出典上限" + UUID.randomUUID();
+        var data = draft(null);
+        data.put("sake",Map.of("ja",name,"ko","출처 한도"));
+        String id = submit(member("ROLE_USER"),data);
+        var empty = duplicateResult(admin,id);
+        assertTrue(empty.path("candidates").isEmpty());
+        assertFalse(empty.path("sourcesTruncated").booleanValue());
+        long first = catalogFixture(name,1);
+        long second = catalogFixture(name,1);
+        try {
+            assertSourceCounts(duplicateResult(admin,id),0,0,false);
+            for (int i=198;i>=0;i--) addSource(first,i);
+            assertSourceCounts(duplicateResult(admin,id),199,0,false);
+            addSource(second,0);
+            assertSourceCounts(duplicateResult(admin,id),199,1,false);
+            addSource(first,199);
+            assertSourceCounts(duplicateResult(admin,id),200,0,true);
+            for (int i=200;i<205;i++) addSource(first,i);
+            var capped = duplicateResult(admin,id);
+            assertSourceCounts(capped,200,0,true);
+            assertEquals(first,capped.path("candidates").get(0).path("catalog").path("no").longValue());
+            assertEquals(second,capped.path("candidates").get(1).path("catalog").path("no").longValue());
+            var sources = capped.path("candidates").get(0).path("sourceIdentifiers");
+            assertEquals(sourceKey(first,0),sources.get(0).path("externalKey").asString());
+            assertEquals(sourceKey(first,199),sources.get(199).path("externalKey").asString());
+            assertEquals("BREWERY_OFFICIAL",sources.get(0).path("system").asString());
+        } finally {
+            db.update("DELETE FROM SAKE_SOURCE WHERE sake_no IN (?,?)",first,second);
+            db.update("DELETE FROM SAKE WHERE no IN (?,?)",first,second);
+        }
+    }
+
+    private JsonNode duplicateFixture(Member admin, Map<String,Object> data) throws Exception {
+        return duplicateResult(admin,submit(member("ROLE_USER"),data)).path("candidates");
+    }
+
+    private JsonNode duplicateResult(Member admin,String id) throws Exception {
+        var response = get(admin,adminPath(id)+"/duplicates");
+        assertEquals(200,response.statusCode(),string(response));
+        return node(response);
+    }
+
+    private static JsonNode candidate(JsonNode rows,long no) {
+        for (var row : rows) if (row.path("catalog").path("no").longValue()==no) return row;
+        return null;
+    }
+
+    private static Map<String,Object> proposed(Object ja,Object ko) {
+        return Map.of("proposed",Map.of("ja",ja,"ko",ko));
+    }
+
+    private long catalogFixture(String name,Object brewery) {
+        db.update("INSERT INTO SAKE(name_ja,brewery_no) VALUES (?,?)",name,brewery);
+        return db.queryForObject("SELECT MAX(no) FROM SAKE WHERE name_ja=?",Long.class,name);
+    }
+
+    private void addSource(long sake,int index) {
+        db.update("INSERT INTO SAKE_SOURCE(sake_no,source_system,external_key) VALUES (?,'BREWERY_OFFICIAL',?)",
+                sake,sourceKey(sake,index));
+    }
+
+    private static String sourceKey(long sake,int index) {
+        return String.format(java.util.Locale.ROOT,"pr17-%d-%03d",sake,index);
+    }
+
+    private static void assertSourceCounts(JsonNode result,int first,int second,boolean truncated) {
+        assertEquals(2,result.path("candidates").size());
+        assertTrue(result.path("sourcesTruncated").isBoolean());
+        assertEquals(truncated,result.path("sourcesTruncated").booleanValue());
+        assertEquals(first,result.path("candidates").get(0).path("sourceIdentifiers").size());
+        assertEquals(second,result.path("candidates").get(1).path("sourceIdentifiers").size());
+    }
+
+    private static void assertImageDenied(int code,HttpResponse<?> response) {
+        assertEquals(code,response.statusCode());
+        assertFalse(response.headers().firstValue("Content-Type").orElse("").startsWith("image/"));
+        assertEquals("private, no-store",response.headers().firstValue("Cache-Control").orElseThrow());
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertTrue(latch.await(10,TimeUnit.SECONDS));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+        }
+    }
+
+    private int raceAction(Member actor,String id,String action) throws Exception {
+        return switch (action) {
+            case "REVISION" -> reviseAsAdmin(actor,id,0,draft(null)).statusCode();
+            case "CANCEL" -> post(actor,ROOT+"/"+id+"/cancel",null,Map.of("expectedVersion",0)).statusCode();
+            default -> decideAsAdmin(actor,id,UUID.randomUUID(),action,0,1).statusCode();
+        };
+    }
+
+    private String uploadedAsset(Member owner) throws Exception {
+        var response = upload(owner,UUID.randomUUID(),"image/png",image("png"));
+        assertEquals(201,response.statusCode(),string(response));
+        return node(response).get("attachmentId").asString();
+    }
+
+    private String submit(Member owner,Map<String,Object> draft) throws Exception {
+        var response = post(owner,ROOT,UUID.randomUUID(),draft);
+        assertEquals(201,response.statusCode(),string(response));
+        return node(response).get("id").asString();
+    }
+
+    private HttpResponse<byte[]> reviseAsAdmin(Member admin,String id,long version,Map<String,Object> data) throws Exception {
+        return post(admin,adminPath(id)+"/revisions",null,
+                Map.of("expectedVersion",version,"reason","검수 수정","data",data));
+    }
+
+    private HttpResponse<byte[]> decideAsAdmin(Member admin,String id,UUID key,Object action,long version,int revision) throws Exception {
+        return post(admin,adminPath(id)+"/decisions",key,
+                Map.of("expectedVersion",version,"revisionNo",revision,"decision",action,"reason","검수 결정"));
+    }
+
+    private static String adminPath(String id) { return ADMIN+"/"+id; }
 
     private static Map<String, Object> draft(String image) {
         Map<String, Object> input = new LinkedHashMap<>();

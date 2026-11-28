@@ -135,7 +135,7 @@ class AuthMySqlIntegrationTests {
     }
 
     @Test void flywayV4AndActualTablesAreValid() {
-        assertEquals(11, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class));
+        assertEquals(12, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class));
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='4' AND success=1", Integer.class));
         assertNotNull(db.queryForList("SELECT token_hash,family_id,used FROM AUTH_REFRESH_TOKEN LIMIT 1"));
     }

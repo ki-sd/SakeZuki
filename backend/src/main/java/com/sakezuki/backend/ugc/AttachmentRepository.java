@@ -123,6 +123,18 @@ class AttachmentRepository {
                 """).params(owner, asset.toString(), submission.toString()).query(AttachmentRepository::preview).optional();
     }
 
+    Optional<Preview> adminPreview(long actor, UUID submission, UUID attachment) {
+        return sql.sql(PREVIEW + """
+                JOIN CATALOG_SUBMISSION s ON s.id=a.submission_id AND s.owner_no=a.owner_no
+                WHERE s.id=? AND a.id=? AND a.status='READY'
+                  AND s.status IN ('PENDING','NEEDS_REVISION')
+                  AND EXISTS (SELECT 1 FROM SUBMISSION_REVISION r WHERE r.attachment_id=a.id AND r.submission_id=s.id)
+                  AND EXISTS (SELECT 1 FROM MEMBER reviewer JOIN MEMBER_AUTHORITY authority
+                    ON authority.member_no=reviewer.no AND authority.authority='ROLE_ADMIN'
+                    WHERE reviewer.no=? AND reviewer.status='ACTIVE')
+                """).params(submission.toString(), attachment.toString(), actor).query(AttachmentRepository::preview).optional();
+    }
+
     private static Intent intent(ResultSet rs, int row) throws SQLException {
         return new Intent(rs.getString("id"), rs.getString("request_hash"), rs.getString("status"),
                 rs.getLong("generation"), rs.getBoolean("leased"), rs.getBoolean("expired"),

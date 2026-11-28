@@ -18,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.concurrent.Semaphore;
 
 @Service
@@ -30,7 +32,7 @@ class AttachmentService {
     private final ImageAssetService images;
     private final ImageStores stores;
     private final TransactionTemplate transaction;
-    private final Semaphore previews = new Semaphore(4);
+    private final Semaphore previews = new Semaphore(2);
 
     AttachmentService(AttachmentRepository uploads, SubmissionRepository submissions, SubmissionLimits limits,
                       ImageAssetService images, ImageStores stores, PlatformTransactionManager manager) {
@@ -114,9 +116,14 @@ class AttachmentService {
     }
 
     void preview(long owner, UUID id, UUID submission, HttpServletResponse response) throws IOException {
+        preview(() -> uploads.preview(owner, id, submission), response, false);
+    }
+
+    void preview(Supplier<Optional<AttachmentRepository.Preview>> authorizedLookup, HttpServletResponse response,
+                 boolean requireSameGeneration) throws IOException {
+        var candidate = authorizedLookup.get().orElseThrow(SubmissionErrors::missing);
         if (!previews.tryAcquire()) throw unavailable();
         try {
-            var candidate = uploads.preview(owner, id, submission).orElseThrow(SubmissionErrors::missing);
             var storage = stores.storage(ImageStores.Area.STAGING).orElseThrow(AttachmentService::unavailable);
             byte[] bytes;
             try {
@@ -125,8 +132,9 @@ class AttachmentService {
                 images.reportVerifiedReadFailure(candidate.objectId(), candidate.generation(), failure);
                 throw unavailable();
             }
-            var current = uploads.preview(owner, id, submission);
+            var current = authorizedLookup.get();
             if (current.isEmpty() || current.get().objectId() != candidate.objectId()
+                    || (requireSameGeneration && current.get().generation() != candidate.generation())
                     || !current.get().media().equals(candidate.media())) {
                 throw SubmissionErrors.missing();
             }

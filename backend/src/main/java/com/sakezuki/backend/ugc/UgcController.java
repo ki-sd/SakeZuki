@@ -18,35 +18,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.DeserializationFeature;
-import tools.jackson.core.StreamReadFeature;
-import tools.jackson.databind.cfg.CoercionAction;
-import tools.jackson.databind.cfg.CoercionInputShape;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.type.LogicalType;
-
 import java.io.IOException;
 
 @RestController
 class UgcController {
     static final String ROOT = "/api/user/sake-submissions";
-
-    private static final JsonMapper REQUEST_JSON = JsonMapper.builder()
-            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
-            .withCoercionConfig(LogicalType.Integer, config -> config
-                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
-                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail))
-            .withCoercionConfig(LogicalType.Float, config -> config
-                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
-                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail))
-            .withCoercionConfig(LogicalType.Boolean, config -> config
-                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
-                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)
-                    .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail))
-            .build();
 
     private final SubmissionService submissions;
     private final AttachmentService attachments;
@@ -72,7 +48,7 @@ class UgcController {
     @ResponseStatus(HttpStatus.CREATED)
     SubmissionService.Receipt create(@AuthenticationPrincipal Jwt jwt, @RequestHeader(value = "Idempotency-Key", required = false)
                                      String key, HttpServletRequest request) throws IOException {
-        return submissions.create(owner(jwt), SubmissionErrors.uuid(key, 422), read(request, SubmissionInput.class));
+        return submissions.create(owner(jwt), SubmissionErrors.uuid(key, 422), UgcRequestJson.read(request, SubmissionInput.class));
     }
 
     @GetMapping(ROOT)
@@ -90,13 +66,13 @@ class UgcController {
     @ResponseStatus(HttpStatus.CREATED)
     SubmissionService.Receipt revision(@AuthenticationPrincipal Jwt jwt, @PathVariable String id,
                                        HttpServletRequest request) throws IOException {
-        return submissions.revise(owner(jwt), SubmissionErrors.uuid(id, 404), read(request, SubmissionInput.Revision.class));
+        return submissions.revise(owner(jwt), SubmissionErrors.uuid(id, 404), UgcRequestJson.read(request, SubmissionInput.Revision.class));
     }
 
     @PostMapping(path = ROOT + "/{id}/cancel", consumes = MediaType.APPLICATION_JSON_VALUE)
     SubmissionService.Receipt cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable String id,
                                      HttpServletRequest request) throws IOException {
-        return submissions.cancel(owner(jwt), SubmissionErrors.uuid(id, 404), read(request, SubmissionInput.Cancel.class));
+        return submissions.cancel(owner(jwt), SubmissionErrors.uuid(id, 404), UgcRequestJson.read(request, SubmissionInput.Cancel.class));
     }
 
     @PostMapping(path = ROOT + "/uploads", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -129,18 +105,6 @@ class UgcController {
             org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
     ResponseEntity<String> invalidParameter() {
         return ResponseEntity.unprocessableContent().body("필수 입력과 요청 형식을 확인해 주세요.");
-    }
-
-    private <T> T read(HttpServletRequest request, Class<T> type) throws IOException {
-        byte[] input = request.getInputStream().readNBytes(SubmissionLimits.JSON_BYTES + 1);
-        if (input.length > SubmissionLimits.JSON_BYTES) throw SubmissionErrors.error(413, "제보 본문 용량을 줄여 주세요.");
-        try {
-            T value = REQUEST_JSON.readerFor(type).readValue(input);
-            if (value == null) throw SubmissionInput.invalid("body");
-            return value;
-        } catch (JacksonException invalid) {
-            throw SubmissionInput.invalid("body");
-        }
     }
 
     private static long owner(Jwt jwt) {
